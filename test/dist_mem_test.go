@@ -59,6 +59,7 @@ func TestNode2(t *testing.T) {
 	}
 	oneHourBucket := cachecloud.BucketName("1h")
 	cachecloud.Init(
+		"",
 		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem),
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
