@@ -8,8 +8,8 @@ func GetBucket(bucketName BucketName) CacheBucket {
 }
 
 // GetBucketByType 通过指定的存储桶和类型，获取存储桶实例
-func GetBucketByType(bucketName BucketName, tpy BucketType) CacheBucket {
-	return getBucketByType(bucketName, tpy)
+func GetBucketByType(bucketName BucketName, typ BucketType) CacheBucket {
+	return getBucketByType(bucketName, typ)
 }
 
 // GetCacheValue 通过指定的存储桶和缓存key，获取缓存值

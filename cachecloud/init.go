@@ -6,7 +6,7 @@ import (
 )
 
 // 设置全局服务名
-var serviceName string
+var serviceNamePrefix string
 var once sync.Once
 
 var use2LCache bool
@@ -14,11 +14,12 @@ var useDistMemCache bool
 var useMemCache bool
 var useRedisCache bool
 
-func Init(configs ...CacheConfig) {
+func Init(serviceName string, cacheConfigs ...CacheConfig) {
 	once.Do(func() {
-		if len(configs) > 0 {
+		serviceNamePrefix = serviceName
+		if len(cacheConfigs) > 0 {
 			// 加载内存缓存设置
-			memConfigs := coll.SliceFilter(configs, func(e CacheConfig) bool {
+			memConfigs := coll.SliceFilter(cacheConfigs, func(e CacheConfig) bool {
 				return e.typ == BucketTypeMem
 			})
 			if len(memConfigs) > 0 {
@@ -26,7 +27,7 @@ func Init(configs ...CacheConfig) {
 				initMemCacheManager(memConfigs...)
 			}
 			// 加载分布式内存缓存设置
-			distMemConfigs := coll.SliceFilter(configs, func(e CacheConfig) bool {
+			distMemConfigs := coll.SliceFilter(cacheConfigs, func(e CacheConfig) bool {
 				return e.typ == BucketTypeDistMem
 			})
 			if len(distMemConfigs) > 0 {
@@ -34,14 +35,13 @@ func Init(configs ...CacheConfig) {
 				initDistMemCacheManager(distMemConfigs...)
 			}
 			// 加载redis缓存设置
-			redisConfigs := coll.SliceFilter(configs, func(e CacheConfig) bool {
+			redisConfigs := coll.SliceFilter(cacheConfigs, func(e CacheConfig) bool {
 				return e.typ == BucketTypeRedis
 			})
 			if len(redisConfigs) > 0 {
 				useRedisCache = true
 				initRedisCacheManager(redisConfigs...)
 			}
-
 		}
 	})
 }

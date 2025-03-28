@@ -29,8 +29,8 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 		for _, v := range configs {
 			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.expire))
 		}
-		if serviceName != "" {
-			distMemTopicName = serviceName + ":" + distMemTopicName
+		if serviceNamePrefix != "" {
+			distMemTopicName = serviceNamePrefix + ":" + distMemTopicName
 		}
 		subscribe, err := distMemTopicCmd.Subscribe(context.Background(), redisstarter.NewRedisKey(distMemTopicName))
 		if err != nil {

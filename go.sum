@@ -1,11 +1,5 @@
-github.com/acexy/golang-toolkit v0.0.44 h1:vhjIrZ8VYAmQGdJgU+oWhXRMrRk//Kk4ssFci02facY=
-github.com/acexy/golang-toolkit v0.0.44/go.mod h1:He833/0n/wP1Ij/osLIazvdwlrIxT8yOsdcw74U3B7c=
-github.com/acexy/golang-toolkit v0.0.45-0.20250328082754-b717bb4569a0 h1:sB1NE/IJ/mSu2ROc6VjvhNPzQq12RBWOdtGJOc+fV2g=
-github.com/acexy/golang-toolkit v0.0.45-0.20250328082754-b717bb4569a0/go.mod h1:He833/0n/wP1Ij/osLIazvdwlrIxT8yOsdcw74U3B7c=
-github.com/acexy/golang-toolkit v0.0.45-0.20250328091222-b72edefca1d4 h1:dyO4VcnmaPIUz4NvrZCSkJg/WQC/Z7BRmRmhmZyW4ko=
-github.com/acexy/golang-toolkit v0.0.45-0.20250328091222-b72edefca1d4/go.mod h1:He833/0n/wP1Ij/osLIazvdwlrIxT8yOsdcw74U3B7c=
-github.com/acexy/golang-toolkit v0.0.45-0.20250328092141-4def169a9598 h1:KdccWT8U8aqnO3DzLDvc8WTEyA3Jw+wei8B0rA8G6gI=
-github.com/acexy/golang-toolkit v0.0.45-0.20250328092141-4def169a9598/go.mod h1:He833/0n/wP1Ij/osLIazvdwlrIxT8yOsdcw74U3B7c=
+github.com/acexy/golang-toolkit v0.0.45-0.20250328095157-cc83a6670561 h1:xq1S5cWHUNlMcEVVl6+QKUv4+n0rQC6K3pW+0CWaN7w=
+github.com/acexy/golang-toolkit v0.0.45-0.20250328095157-cc83a6670561/go.mod h1:He833/0n/wP1Ij/osLIazvdwlrIxT8yOsdcw74U3B7c=
 github.com/allegro/bigcache/v3 v3.1.0 h1:H2Vp8VOvxcrB91o86fUSVJFqeuz8kpyyB02eH3bSzwk=
 github.com/allegro/bigcache/v3 v3.1.0/go.mod h1:aPyh7jEvrog9zAwx5N7+JUQX5dZTSGpxF1LAR4dr35I=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=

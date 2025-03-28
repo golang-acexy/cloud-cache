@@ -21,8 +21,8 @@ func initRedisCacheManager(configs ...CacheConfig) {
 			buckets: make(map[BucketName]*redisCacheBucket),
 		}
 		var keyPrefix string
-		if serviceName != "" {
-			keyPrefix = serviceName + ":"
+		if serviceNamePrefix != "" {
+			keyPrefix = serviceNamePrefix + ":"
 		}
 		coll.SliceForeachAll(configs, func(config CacheConfig) {
 			redisCache.buckets[config.bucketName] = &redisCacheBucket{

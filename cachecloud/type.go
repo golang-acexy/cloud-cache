@@ -46,8 +46,3 @@ type CacheBucket interface {
 	// Evict 清除缓存
 	Evict(key CacheKey, keyAppend ...interface{}) error
 }
-
-type cacheManager interface {
-	// GetBucket 获取存储桶
-	getBucket(bucketName BucketName) CacheBucket
-}

@@ -2,6 +2,11 @@ package cachecloud
 
 import "github.com/acexy/golang-toolkit/logger"
 
+type cacheManager interface {
+	// GetBucket 获取存储桶
+	getBucket(bucketName BucketName) CacheBucket
+}
+
 func getBucket(name BucketName) CacheBucket {
 	cacheBucket := get2LBucket(name)
 	if cacheBucket != nil {

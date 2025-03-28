@@ -1,11 +1,11 @@
 package cachecloud
 
-var level2Cache *SecondLevelCacheManager
+var level2Cache *secondLevelCacheManager
 
-// SecondLevelCacheManager 二级缓存管理器
-type SecondLevelCacheManager struct {
+// secondLevelCacheManager 二级缓存管理器
+type secondLevelCacheManager struct {
 }
 
-func (*SecondLevelCacheManager) getBucket(bucketName BucketName) CacheBucket {
+func (*secondLevelCacheManager) getBucket(bucketName BucketName) CacheBucket {
 	return nil
 }

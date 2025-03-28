@@ -29,6 +29,7 @@ func TestRedis(t *testing.T) {
 	oneHourBucket := cachecloud.BucketName("1h")
 
 	cachecloud.Init(
+		"",
 		cachecloud.NewCacheConfig(oneSecBucket, time.Second, cachecloud.BucketTypeRedis),
 		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeRedis),
 	)
