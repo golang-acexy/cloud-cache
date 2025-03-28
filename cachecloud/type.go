@@ -7,6 +7,8 @@ const (
 	BucketType2L                 = "2l"
 	BucketTypeDistMem            = "dist-mem"
 	BucketTypeRedis              = "redis"
+
+	topicDelimiter = "<@>"
 )
 
 // BucketName 存储桶名称

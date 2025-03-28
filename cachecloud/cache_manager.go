@@ -1,18 +1,24 @@
 package cachecloud
 
+import "github.com/acexy/golang-toolkit/logger"
+
 func getBucket(name BucketName) CacheBucket {
 	cacheBucket := get2LBucket(name)
 	if cacheBucket != nil {
+		logger.Logrus().Traceln(name, "使用二级缓存管理器处理")
 		return cacheBucket
 	}
 	cacheBucket = getDistMemBucket(name)
 	if cacheBucket != nil {
+		logger.Logrus().Traceln(name, "使用分布式内存缓存管理器处理")
 		return cacheBucket
 	}
 	cacheBucket = getMemBucket(name)
 	if cacheBucket != nil {
+		logger.Logrus().Traceln(name, "使用独立内存缓存管理器处理")
 		return cacheBucket
 	}
+	logger.Logrus().Traceln(name, "使用Redis缓存管理器处理")
 	return getRedisBucket(name)
 }
 func getBucketByType(name BucketName, typ BucketType) CacheBucket {

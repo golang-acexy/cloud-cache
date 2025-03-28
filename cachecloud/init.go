@@ -25,6 +25,14 @@ func Init(configs ...CacheConfig) {
 				useMemCache = true
 				initMemCacheManager(memConfigs...)
 			}
+			// 加载分布式内存缓存设置
+			distMemConfigs := coll.SliceFilter(configs, func(e CacheConfig) bool {
+				return e.typ == BucketTypeDistMem
+			})
+			if len(distMemConfigs) > 0 {
+				useDistMemCache = true
+				initDistMemCacheManager(distMemConfigs...)
+			}
 			// 加载redis缓存设置
 			redisConfigs := coll.SliceFilter(configs, func(e CacheConfig) bool {
 				return e.typ == BucketTypeRedis
@@ -33,6 +41,7 @@ func Init(configs ...CacheConfig) {
 				useRedisCache = true
 				initRedisCacheManager(redisConfigs...)
 			}
+
 		}
 	})
 }

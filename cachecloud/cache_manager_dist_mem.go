@@ -2,14 +2,19 @@ package cachecloud
 
 import (
 	"context"
+	"encoding/hex"
 	"github.com/acexy/golang-toolkit/caching"
+	"github.com/acexy/golang-toolkit/crypto/hashing"
 	"github.com/acexy/golang-toolkit/logger"
+	"github.com/acexy/golang-toolkit/util/gob"
 	"github.com/golang-acexy/starter-redis/redisstarter"
+	"strings"
 	"sync"
 )
 
 var distMemCache *distMemCacheManager
 var distMemTopicCmd = redisstarter.TopicCmd()
+var distMemTopicName = "dis-mem-sync-topic"
 
 // memCacheManager 内存缓存管理器
 type distMemCacheManager struct {
@@ -24,20 +29,41 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 		for _, v := range configs {
 			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.expire))
 		}
-		topicName := "dis-mem-sync-topic"
 		if serviceName != "" {
-			topicName = serviceName + ":" + topicName
+			distMemTopicName = serviceName + ":" + distMemTopicName
 		}
-		subscribe, err := distMemTopicCmd.Subscribe(context.Background(), redisstarter.NewRedisKey(topicName))
+		subscribe, err := distMemTopicCmd.Subscribe(context.Background(), redisstarter.NewRedisKey(distMemTopicName))
 		if err != nil {
-			logger.Logrus().Errorln("subscript", topicName, " failed", err)
+			logger.Logrus().Errorln("初始化分布式内存缓存同步订阅事件失败", distMemTopicName, err)
 		}
 		go func() {
 			for v := range subscribe {
-				println(v)
+				if !strings.HasPrefix(v.Payload, getNodeId()) {
+					logger.Logrus().Traceln("分布式内存缓存消息同步数据", v.String())
+					split := strings.SplitN(v.Payload, topicDelimiter, 4)
+					bucketName := split[1]
+					cacheKey := split[2]
+					sum := split[3]
+					key := caching.NewNemCacheKey(cacheKey)
+					bucket := manager.GetBucket(bucketName)
+					if sum == "" {
+						logger.Logrus().Traceln("分布式缓存值已删除", bucketName, cacheKey)
+						_ = bucket.Evict(key)
+						return
+					}
+					bytes, e := bucket.GetBytes(key)
+					if e == nil {
+						md5Array := hashing.Md5Bytes(bytes)
+						currentSum := hex.EncodeToString(md5Array[:])
+						if sum != currentSum {
+							logger.Logrus().Traceln("分布式缓存值已变化", bucketName, cacheKey)
+							_ = bucket.Evict(key)
+						}
+					}
+				}
 			}
 		}()
-		memCache = &memCacheManager{
+		distMemCache = &distMemCacheManager{
 			manager: manager,
 			buckets: make(map[string]CacheBucket),
 		}
@@ -51,27 +77,45 @@ func (m *distMemCacheManager) getBucket(bucketName BucketName) CacheBucket {
 	}
 	defer m.blocker.Unlock()
 	m.blocker.Lock()
-	m.buckets[name] = distMemeCacheBucket{
-		bucket:       m.manager.GetBucket(name),
-		bucketPrefix: name,
+	m.buckets[name] = &distMemeCacheBucket{
+		bucket:     m.manager.GetBucket(name),
+		bucketName: name,
 	}
 	return m.buckets[name]
 }
 
 // memeCacheBucket 内存缓存桶
 type distMemeCacheBucket struct {
-	bucket       caching.CacheBucket
-	bucketPrefix string
+	bucket     caching.CacheBucket
+	bucketName string
 }
 
-func (m distMemeCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
+func (m *distMemeCacheBucket) publicEvent(bucketName, rawCacheKey, dataSum string) {
+	err := distMemTopicCmd.Publish(redisstarter.NewRedisKey(distMemTopicName), getNodeId()+topicDelimiter+bucketName+topicDelimiter+rawCacheKey+topicDelimiter+dataSum)
+	if err != nil {
+		logger.Logrus().Errorln("发布分布式内存缓存变化事件失败", rawCacheKey, err)
+	}
+}
+func (m *distMemeCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
 	return m.bucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
 }
 
-func (m distMemeCacheBucket) Put(key CacheKey, data any, keyAppend ...interface{}) error {
-	return m.bucket.Put(caching.NewNemCacheKey(key.KeyFormat), data, keyAppend...)
+func (m *distMemeCacheBucket) Put(key CacheKey, data any, keyAppend ...interface{}) error {
+	err := m.bucket.Put(caching.NewNemCacheKey(key.KeyFormat), data, keyAppend...)
+	if err == nil {
+		// 同步缓存数据发生变化的事件
+		encode, _ := gob.Encode(data)
+		md5Array := hashing.Md5Bytes(encode)
+		m.publicEvent(m.bucketName, caching.OriginKeyString(key.KeyFormat, keyAppend...), hex.EncodeToString(md5Array[:]))
+	}
+	return err
 }
 
-func (m distMemeCacheBucket) Evict(key CacheKey, keyAppend ...interface{}) error {
-	return m.bucket.Evict(caching.NewNemCacheKey(key.KeyFormat), keyAppend...)
+func (m *distMemeCacheBucket) Evict(key CacheKey, keyAppend ...interface{}) error {
+	err := m.bucket.Evict(caching.NewNemCacheKey(key.KeyFormat), keyAppend...)
+	if err != nil {
+		// 同步缓存数据删除事件
+		m.publicEvent(m.bucketName, caching.OriginKeyString(key.KeyFormat, keyAppend...), "")
+	}
+	return err
 }
