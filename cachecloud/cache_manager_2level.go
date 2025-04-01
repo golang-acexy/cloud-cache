@@ -108,8 +108,8 @@ func (m *secondLevelCacheBucket) publicEvent(bucketName, rawCacheKey, dataSum st
 }
 func (m *secondLevelCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
 	err := m.memBucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
-	if errors.Is(err, caching.SourceNotFound) {
-		logger.Logrus().Traceln("内存缓存中未命中", key.RawKeyString(keyAppend...), "向redis中请求", err)
+	if errors.Is(err, caching.CacheMiss) {
+		logger.Logrus().Traceln("内存缓存中未命中", key.RawKeyString(keyAppend...), "向redis中请求")
 		err = m.redisBucket.Get(key, result, keyAppend...)
 		if errors.Is(err, redis.Nil) {
 			logger.Logrus().Traceln("redis中未命", key.RawKeyString(keyAppend...))
