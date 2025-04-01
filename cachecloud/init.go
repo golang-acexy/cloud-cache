@@ -1,7 +1,9 @@
 package cachecloud
 
 import (
+	"github.com/acexy/golang-toolkit/logger"
 	"github.com/acexy/golang-toolkit/util/coll"
+	"strings"
 	"sync"
 )
 
@@ -51,6 +53,9 @@ func Init(option Option, cacheConfigs ...CacheConfig) {
 						})
 					})
 					use2LCache = true
+					logger.Logrus().Debugln("已启用自动二级缓存管理，发现匹配存储桶", strings.Join(coll.SliceCollect(leve2MemConfigs, func(e CacheConfig) string {
+						return string(e.bucketName)
+					}), ","))
 					initSecondLevelCacheManager(leve2MemConfigs)
 					// 移除已被二级缓存管理的内存缓存
 					memConfigs = coll.SliceComplement(memConfigs, leve2MemConfigs, func(part1, part2 CacheConfig) bool {
