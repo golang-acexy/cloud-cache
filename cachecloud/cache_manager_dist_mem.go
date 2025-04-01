@@ -3,6 +3,7 @@ package cachecloud
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"github.com/acexy/golang-toolkit/caching"
 	"github.com/acexy/golang-toolkit/crypto/hashing"
 	"github.com/acexy/golang-toolkit/logger"
@@ -19,7 +20,7 @@ var distMemTopicName = "dis-mem-sync-topic"
 // memCacheManager 内存缓存管理器
 type distMemCacheManager struct {
 	manager *caching.CacheManager
-	buckets map[string]CacheBucket
+	buckets map[string]*distMemeCacheBucket
 	blocker sync.Mutex
 }
 
@@ -65,7 +66,7 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 		}()
 		distMemCache = &distMemCacheManager{
 			manager: manager,
-			buckets: make(map[string]CacheBucket),
+			buckets: make(map[string]*distMemeCacheBucket),
 		}
 	}
 }
@@ -97,7 +98,11 @@ func (m *distMemeCacheBucket) publicEvent(bucketName, rawCacheKey, dataSum strin
 	}
 }
 func (m *distMemeCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
-	return m.bucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
+	err := m.bucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
+	if errors.Is(err, caching.CacheMiss) {
+		err = CacheMiss
+	}
+	return err
 }
 
 func (m *distMemeCacheBucket) Put(key CacheKey, data any, keyAppend ...interface{}) error {
@@ -106,7 +111,7 @@ func (m *distMemeCacheBucket) Put(key CacheKey, data any, keyAppend ...interface
 		// 同步缓存数据发生变化的事件
 		encode, _ := gob.Encode(data)
 		md5Array := hashing.Md5Bytes(encode)
-		m.publicEvent(m.bucketName, caching.OriginKeyString(key.KeyFormat, keyAppend...), hex.EncodeToString(md5Array[:]))
+		m.publicEvent(m.bucketName, key.RawKeyString(keyAppend...), hex.EncodeToString(md5Array[:]))
 	}
 	return err
 }
@@ -115,7 +120,7 @@ func (m *distMemeCacheBucket) Evict(key CacheKey, keyAppend ...interface{}) erro
 	err := m.bucket.Evict(caching.NewNemCacheKey(key.KeyFormat), keyAppend...)
 	if err != nil {
 		// 同步缓存数据删除事件
-		m.publicEvent(m.bucketName, caching.OriginKeyString(key.KeyFormat, keyAppend...), "")
+		m.publicEvent(m.bucketName, key.RawKeyString(keyAppend...), "")
 	}
 	return err
 }

@@ -28,16 +28,15 @@ func getBucket(name BucketName) CacheBucket {
 }
 func getBucketByType(name BucketName, typ BucketType) CacheBucket {
 	switch typ {
-	case BucketType2L:
-		return get2LBucket(name)
-	case BucketTypeDistMem:
-		return getDistMemBucket(name)
 	case BucketTypeMem:
 		return getMemBucket(name)
 	case BucketTypeRedis:
 		return getRedisBucket(name)
+	case BucketTypeDistMem:
+		return getDistMemBucket(name)
+	default:
+		return get2LBucket(name)
 	}
-	return nil
 }
 
 func get2LBucket(name BucketName) CacheBucket {

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestNode1(t *testing.T) {
+func TestDistMem1(t *testing.T) {
 	loader := parent.NewStarterLoader([]parent.Starter{cluster})
 	err := loader.Start()
 	if err != nil {
@@ -19,7 +19,7 @@ func TestNode1(t *testing.T) {
 	}
 	oneHourBucket := cachecloud.BucketName("1h")
 	cachecloud.Init(
-		"",
+		cachecloud.Option{},
 		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem),
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
@@ -50,7 +50,7 @@ func TestNode1(t *testing.T) {
 	})
 }
 
-func TestNode2(t *testing.T) {
+func TestDistMem2(t *testing.T) {
 	loader := parent.NewStarterLoader([]parent.Starter{cluster})
 	err := loader.Start()
 	if err != nil {
@@ -59,7 +59,7 @@ func TestNode2(t *testing.T) {
 	}
 	oneHourBucket := cachecloud.BucketName("1h")
 	cachecloud.Init(
-		"",
+		cachecloud.Option{},
 		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem),
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
@@ -90,7 +90,7 @@ func TestNode2(t *testing.T) {
 	})
 }
 
-func TestNodeUpdated(t *testing.T) {
+func TestDistMemUpdated(t *testing.T) {
 	loader := parent.NewStarterLoader([]parent.Starter{cluster})
 	err := loader.Start()
 	if err != nil {
@@ -98,10 +98,7 @@ func TestNodeUpdated(t *testing.T) {
 		return
 	}
 	oneHourBucket := cachecloud.BucketName("1h")
-	cachecloud.Init(
-		"",
-		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem),
-	)
+	cachecloud.Init(cachecloud.Option{}, cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem))
 
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
 	_ = cachecloud.PutCacheValue(oneHourBucket, cacheKeyTest, Model{
@@ -111,7 +108,7 @@ func TestNodeUpdated(t *testing.T) {
 	})
 }
 
-func TestNodeDeleted(t *testing.T) {
+func TestDistMemDeleted(t *testing.T) {
 	loader := parent.NewStarterLoader([]parent.Starter{cluster})
 	err := loader.Start()
 	if err != nil {
@@ -120,7 +117,7 @@ func TestNodeDeleted(t *testing.T) {
 	}
 	oneHourBucket := cachecloud.BucketName("1h")
 	cachecloud.Init(
-		"",
+		cachecloud.Option{},
 		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem),
 	)
 

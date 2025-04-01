@@ -19,8 +19,7 @@ func TestMem(t *testing.T) {
 	oneHourBucket := cachecloud.BucketName("1h")
 
 	cachecloud.Init(
-		"",
-		cachecloud.NewCacheConfig(oneSecBucket, time.Second, cachecloud.BucketTypeMem),
+		cachecloud.Option{}, cachecloud.NewCacheConfig(oneSecBucket, time.Second, cachecloud.BucketTypeMem),
 		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeMem),
 	)
 

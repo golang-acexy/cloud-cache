@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/acexy/golang-toolkit/util/coll"
 	"github.com/golang-acexy/starter-redis/redisstarter"
+	"github.com/redis/go-redis/v9"
 	"time"
 )
 
@@ -44,7 +45,11 @@ type redisCacheBucket struct {
 }
 
 func (m *redisCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
-	return redisstarter.StringCmd().GetAnyWithGob(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expire), result, keyAppend...)
+	err := redisstarter.StringCmd().GetAnyWithGob(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expire), result, keyAppend...)
+	if errors.Is(err, redis.Nil) {
+		err = CacheMiss
+	}
+	return err
 }
 
 func (m *redisCacheBucket) Put(key CacheKey, data any, keyAppend ...interface{}) error {

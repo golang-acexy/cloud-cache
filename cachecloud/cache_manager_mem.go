@@ -1,6 +1,7 @@
 package cachecloud
 
 import (
+	"errors"
 	"github.com/acexy/golang-toolkit/caching"
 	"sync"
 )
@@ -10,7 +11,7 @@ var memCache *memCacheManager
 // memCacheManager 内存缓存管理器
 type memCacheManager struct {
 	manager *caching.CacheManager
-	buckets map[string]CacheBucket
+	buckets map[string]*memeCacheBucket
 	blocker sync.Mutex
 }
 
@@ -22,7 +23,7 @@ func initMemCacheManager(configs ...CacheConfig) {
 		}
 		memCache = &memCacheManager{
 			manager: manager,
-			buckets: make(map[string]CacheBucket),
+			buckets: make(map[string]*memeCacheBucket),
 		}
 	}
 }
@@ -34,7 +35,7 @@ func (m *memCacheManager) getBucket(bucketName BucketName) CacheBucket {
 	}
 	defer m.blocker.Unlock()
 	m.blocker.Lock()
-	m.buckets[name] = memeCacheBucket{
+	m.buckets[name] = &memeCacheBucket{
 		bucket: m.manager.GetBucket(name),
 	}
 	return m.buckets[name]
@@ -45,14 +46,18 @@ type memeCacheBucket struct {
 	bucket caching.CacheBucket
 }
 
-func (m memeCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
-	return m.bucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
+func (m *memeCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
+	err := m.bucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
+	if errors.Is(err, caching.CacheMiss) {
+		err = CacheMiss
+	}
+	return err
 }
 
-func (m memeCacheBucket) Put(key CacheKey, data any, keyAppend ...interface{}) error {
+func (m *memeCacheBucket) Put(key CacheKey, data any, keyAppend ...interface{}) error {
 	return m.bucket.Put(caching.NewNemCacheKey(key.KeyFormat), data, keyAppend...)
 }
 
-func (m memeCacheBucket) Evict(key CacheKey, keyAppend ...interface{}) error {
+func (m *memeCacheBucket) Evict(key CacheKey, keyAppend ...interface{}) error {
 	return m.bucket.Evict(caching.NewNemCacheKey(key.KeyFormat), keyAppend...)
 }

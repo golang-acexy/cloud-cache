@@ -14,18 +14,10 @@ var useDistMemCache bool
 var useMemCache bool
 var useRedisCache bool
 
-func Init(serviceName string, cacheConfigs ...CacheConfig) {
+func Init(option Option, cacheConfigs ...CacheConfig) {
 	once.Do(func() {
-		serviceNamePrefix = serviceName
+		serviceNamePrefix = option.ServiceName
 		if len(cacheConfigs) > 0 {
-			// 加载内存缓存设置
-			memConfigs := coll.SliceFilter(cacheConfigs, func(e CacheConfig) bool {
-				return e.typ == BucketTypeMem
-			})
-			if len(memConfigs) > 0 {
-				useMemCache = true
-				initMemCacheManager(memConfigs...)
-			}
 			// 加载分布式内存缓存设置
 			distMemConfigs := coll.SliceFilter(cacheConfigs, func(e CacheConfig) bool {
 				return e.typ == BucketTypeDistMem
@@ -41,6 +33,35 @@ func Init(serviceName string, cacheConfigs ...CacheConfig) {
 			if len(redisConfigs) > 0 {
 				useRedisCache = true
 				initRedisCacheManager(redisConfigs...)
+			}
+			memConfigs := coll.SliceFilter(cacheConfigs, func(e CacheConfig) bool {
+				return e.typ == BucketTypeMem
+			})
+			if option.AutoEnable2LevelCache && len(memConfigs) > 0 && len(redisConfigs) > 0 {
+				leve2Configs := coll.SliceIntersection(memConfigs, coll.SliceFilter(redisConfigs, func(e CacheConfig) bool {
+					return e.typ == BucketTypeRedis
+				}), func(part1, part2 CacheConfig) bool {
+					return part1.bucketName == part2.bucketName
+				})
+
+				if len(leve2Configs) > 0 {
+					leve2MemConfigs := coll.SliceFilter(memConfigs, func(e CacheConfig) bool {
+						return coll.SliceContains(leve2Configs, e, func(c1 CacheConfig, c2 CacheConfig) bool {
+							return c1.bucketName == c2.bucketName
+						})
+					})
+					use2LCache = true
+					initSecondLevelCacheManager(leve2MemConfigs)
+					// 移除已被二级缓存管理的内存缓存
+					memConfigs = coll.SliceComplement(memConfigs, leve2MemConfigs, func(part1, part2 CacheConfig) bool {
+						return part1.bucketName == part2.bucketName
+					})
+				}
+			}
+			// 加载内存缓存设置
+			if len(memConfigs) > 0 {
+				useMemCache = true
+				initMemCacheManager(memConfigs...)
 			}
 		}
 	})
