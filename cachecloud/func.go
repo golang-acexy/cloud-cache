@@ -16,7 +16,7 @@ func GetBucketByType(bucketName BucketName, typ BucketType) CacheBucket {
 func GetCacheValue(bucketName BucketName, cacheKey CacheKey, result any, keyAppend ...interface{}) error {
 	bucket := getBucket(bucketName)
 	if bucket == nil {
-		return errors.New("memBucket not found")
+		return errors.New("bucket not found")
 	}
 	return bucket.Get(cacheKey, result, keyAppend...)
 }
@@ -25,7 +25,7 @@ func GetCacheValue(bucketName BucketName, cacheKey CacheKey, result any, keyAppe
 func PutCacheValue(bucketName BucketName, cacheKey CacheKey, data any, keyAppend ...interface{}) error {
 	bucket := getBucket(bucketName)
 	if bucket == nil {
-		return errors.New("memBucket not found")
+		return errors.New("bucket not found")
 	}
 	return bucket.Put(cacheKey, data, keyAppend...)
 }
@@ -34,7 +34,7 @@ func PutCacheValue(bucketName BucketName, cacheKey CacheKey, data any, keyAppend
 func EvictCache(bucketName BucketName, cacheKey CacheKey, keyAppend ...interface{}) error {
 	bucket := getBucket(bucketName)
 	if bucket == nil {
-		return errors.New("memBucket not found")
+		return errors.New("bucket not found")
 	}
 	return bucket.Evict(cacheKey, keyAppend...)
 }
@@ -43,7 +43,7 @@ func EvictCache(bucketName BucketName, cacheKey CacheKey, keyAppend ...interface
 func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, supplier Supplier[T], keyAppend ...interface{}) error {
 	bucket := getBucket(bucketName)
 	if bucket == nil {
-		return errors.New("memBucket not found")
+		return errors.New("bucket not found")
 	}
 	err := bucket.Get(cacheKey, result, keyAppend...)
 	if errors.Is(err, CacheMiss) {
@@ -52,6 +52,8 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, suppl
 			if flag {
 				*result = value
 				return bucket.Put(cacheKey, value, keyAppend...)
+			} else {
+				return CacheMiss
 			}
 		}
 	}

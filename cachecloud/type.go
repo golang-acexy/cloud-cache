@@ -12,7 +12,7 @@ const (
 	BucketTypeLevel2             = "level2"
 	BucketTypeRedis              = "redis"
 
-	topicDelimiter = "<@>"
+	topicDelimiter = "<@.>"
 )
 
 var CacheMiss = errors.New("cache miss")
