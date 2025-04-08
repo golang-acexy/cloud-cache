@@ -12,9 +12,11 @@ import (
 )
 
 var cluster = &redisstarter.RedisStarter{
-	RedisConfig: redis.UniversalOptions{
-		Addrs:    []string{":6379", ":6381", ":6380"},
-		Password: "tech-acexy",
+	Config: redisstarter.RedisConfig{
+		UniversalOptions: redis.UniversalOptions{
+			Addrs:    []string{":6379", ":6381", ":6380"},
+			Password: "tech-acexy",
+		},
 	},
 }
 

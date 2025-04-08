@@ -38,37 +38,31 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 		if serviceNamePrefix != "" {
 			level2TopicName = serviceNamePrefix + ":" + level2TopicName
 		}
-		subscribe, err := level2TopicCmd.Subscribe(context.Background(), redisstarter.NewRedisKey(level2TopicName))
-		if err != nil {
-			logger.Logrus().Errorln("初始化二级内存缓存同步订阅事件失败", level2TopicName, err)
-		}
-		go func() {
-			for v := range subscribe {
-				if !strings.HasPrefix(v.Payload, getNodeId()) {
-					logger.Logrus().Traceln("分布式内存缓存消息同步数据", v.String())
-					split := strings.SplitN(v.Payload, topicDelimiter, 4)
-					bucketName := split[1]
-					cacheKey := split[2]
-					sum := split[3]
-					key := caching.NewNemCacheKey(cacheKey)
-					bucket := manager.GetBucket(bucketName)
-					if sum == "" {
-						logger.Logrus().Traceln("分布式缓存值已删除", bucketName, cacheKey)
+		level2TopicCmd.SubscribeRetry(context.Background(), redisstarter.NewRedisKey(level2TopicName), func(v *redis.Message) {
+			if !strings.HasPrefix(v.Payload, getNodeId()) {
+				logger.Logrus().Traceln("分布式内存缓存消息同步数据", v.String())
+				split := strings.SplitN(v.Payload, topicDelimiter, 4)
+				bucketName := split[1]
+				cacheKey := split[2]
+				sum := split[3]
+				key := caching.NewNemCacheKey(cacheKey)
+				bucket := manager.GetBucket(bucketName)
+				if sum == "" {
+					logger.Logrus().Traceln("分布式缓存值已删除", bucketName, cacheKey)
+					_ = bucket.Evict(key)
+					return
+				}
+				bytes, e := bucket.GetBytes(key)
+				if e == nil {
+					md5Array := hashing.Md5Bytes(bytes)
+					currentSum := hex.EncodeToString(md5Array[:])
+					if sum != currentSum {
+						logger.Logrus().Traceln("分布式缓存值已变化", bucketName, cacheKey)
 						_ = bucket.Evict(key)
-						return
-					}
-					bytes, e := bucket.GetBytes(key)
-					if e == nil {
-						md5Array := hashing.Md5Bytes(bytes)
-						currentSum := hex.EncodeToString(md5Array[:])
-						if sum != currentSum {
-							logger.Logrus().Traceln("分布式缓存值已变化", bucketName, cacheKey)
-							_ = bucket.Evict(key)
-						}
 					}
 				}
 			}
-		}()
+		})
 		var keyPrefix = "l2:"
 		if serviceNamePrefix != "" {
 			keyPrefix = serviceNamePrefix + ":" + keyPrefix
@@ -126,9 +120,8 @@ func (m *secondLevelCacheBucket) Get(key CacheKey, result any, keyAppend ...inte
 	if errors.Is(err, caching.CacheMiss) {
 		logger.Logrus().Traceln("内存缓存中未命中", key.RawKeyString(keyAppend...), "向redis中请求")
 		err = m.redisBucket.Get(key, result, keyAppend...)
-		if errors.Is(err, redis.Nil) {
+		if errors.Is(err, CacheMiss) {
 			logger.Logrus().Traceln("redis中未命", key.RawKeyString(keyAppend...))
-			err = CacheMiss
 		} else {
 			logger.Logrus().Traceln("redis中已命中", key.RawKeyString(keyAppend...), "重建mem缓存")
 			_ = m.memBucket.Put(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)

@@ -134,4 +134,6 @@ func TestLevel2Deleted(t *testing.T) {
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
 	_ = cachecloud.EvictCache(level2Bucket, cacheKeyTest)
+
+	loader.StopBySetting()
 }

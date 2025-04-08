@@ -5,7 +5,7 @@ go 1.23.5
 require (
 	github.com/acexy/golang-toolkit v0.0.45-0.20250401025245-e513ddecb530
 	github.com/golang-acexy/starter-parent v0.1.15
-	github.com/golang-acexy/starter-redis v0.1.8
+	github.com/golang-acexy/starter-redis v0.1.9-0.20250408113950-d3a84975159f
 	github.com/redis/go-redis/v9 v9.7.3
 )
 
