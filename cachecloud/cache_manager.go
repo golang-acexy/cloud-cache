@@ -8,7 +8,7 @@ type cacheManager interface {
 }
 
 func getBucket(name BucketName) CacheBucket {
-	cacheBucket := get2LBucket(name)
+	cacheBucket := getLevel2Bucket(name)
 	if cacheBucket != nil {
 		logger.Logrus().Traceln(name, "使用二级缓存管理器处理")
 		return cacheBucket
@@ -35,11 +35,11 @@ func getBucketByType(name BucketName, typ BucketType) CacheBucket {
 	case BucketTypeDistMem:
 		return getDistMemBucket(name)
 	default:
-		return get2LBucket(name)
+		return getLevel2Bucket(name)
 	}
 }
 
-func get2LBucket(name BucketName) CacheBucket {
+func getLevel2Bucket(name BucketName) CacheBucket {
 	if use2LCache {
 		return level2Cache.getBucket(name)
 	}

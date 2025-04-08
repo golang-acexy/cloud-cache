@@ -9,7 +9,6 @@ import (
 const (
 	BucketTypeMem     BucketType = "mem"
 	BucketTypeDistMem            = "dist-mem"
-	BucketTypeLevel2             = "level2"
 	BucketTypeRedis              = "redis"
 
 	topicDelimiter = "<@.>"
@@ -27,6 +26,8 @@ type Option struct {
 
 // BucketName 存储桶名称
 type BucketName string
+
+// BucketType 存储桶类型
 type BucketType string
 
 type Supplier[T any] func() (T, bool)

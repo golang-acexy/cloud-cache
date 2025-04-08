@@ -2,6 +2,11 @@ package cachecloud
 
 import "errors"
 
+// NewCacheKey 创建一个缓存key
+func NewCacheKey(format string) CacheKey {
+	return CacheKey{KeyFormat: format}
+}
+
 // GetBucket 通过指定的存储桶，获取最佳匹配的存储桶实例
 func GetBucket(bucketName BucketName) CacheBucket {
 	return getBucket(bucketName)
@@ -10,6 +15,11 @@ func GetBucket(bucketName BucketName) CacheBucket {
 // GetBucketByType 通过指定的存储桶和类型，获取存储桶实例
 func GetBucketByType(bucketName BucketName, typ BucketType) CacheBucket {
 	return getBucketByType(bucketName, typ)
+}
+
+// GetLevel2Bucket 通过指定的存储桶，获取二级缓存实例
+func GetLevel2Bucket(bucketName BucketName) CacheBucket {
+	return getLevel2Bucket(bucketName)
 }
 
 // GetCacheValue 通过指定的存储桶和缓存key，获取缓存值
