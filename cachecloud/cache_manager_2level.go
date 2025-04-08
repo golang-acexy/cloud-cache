@@ -7,6 +7,7 @@ import (
 	"github.com/acexy/golang-toolkit/caching"
 	"github.com/acexy/golang-toolkit/crypto/hashing"
 	"github.com/acexy/golang-toolkit/logger"
+	"github.com/acexy/golang-toolkit/util/coll"
 	"github.com/acexy/golang-toolkit/util/gob"
 	"github.com/golang-acexy/starter-redis/redisstarter"
 	"github.com/redis/go-redis/v9"
@@ -20,16 +21,19 @@ var level2TopicName = "2l-mem-sync-topic"
 
 // secondLevelCacheManager 二级缓存管理器
 type secondLevelCacheManager struct {
-	manager *caching.CacheManager
-	buckets map[string]*secondLevelCacheBucket
-	blocker sync.Mutex
+	memCacheManager *caching.CacheManager
+
+	configs            []CacheConfig
+	baseRedisKeyPrefix string
+	buckets            map[string]*secondLevelCacheBucket
+	mutex              sync.Mutex
 }
 
-func initSecondLevelCacheManager(memConfigs []CacheConfig) {
-	if len(memConfigs) > 0 {
+func initSecondLevelCacheManager(configs ...CacheConfig) {
+	if len(configs) > 0 {
 		manager := caching.NewEmptyCacheBucketManager()
-		for _, v := range memConfigs {
-			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.expire))
+		for _, v := range configs {
+			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.memExpire))
 		}
 		if serviceNamePrefix != "" {
 			level2TopicName = serviceNamePrefix + ":" + level2TopicName
@@ -65,9 +69,15 @@ func initSecondLevelCacheManager(memConfigs []CacheConfig) {
 				}
 			}
 		}()
+		var keyPrefix = "l2:"
+		if serviceNamePrefix != "" {
+			keyPrefix = serviceNamePrefix + ":" + keyPrefix
+		}
 		level2Cache = &secondLevelCacheManager{
-			manager: manager,
-			buckets: make(map[string]*secondLevelCacheBucket),
+			memCacheManager:    manager,
+			configs:            configs,
+			baseRedisKeyPrefix: keyPrefix,
+			buckets:            make(map[string]*secondLevelCacheBucket),
 		}
 	}
 }
@@ -77,17 +87,23 @@ func (s *secondLevelCacheManager) getBucket(bucketName BucketName) CacheBucket {
 	if bucket, ok := s.buckets[name]; ok {
 		return bucket
 	}
-	defer s.blocker.Unlock()
-	s.blocker.Lock()
-	manager := s.manager.GetBucket(name)
+	defer s.mutex.Unlock()
+	s.mutex.Lock()
+	manager := s.memCacheManager.GetBucket(name)
 	if manager == nil {
 		s.buckets[name] = nil
 		return nil
 	}
+	config, _ := coll.SliceFilterFirstOne(s.configs, func(item CacheConfig) bool {
+		return item.bucketName == bucketName
+	})
 	s.buckets[name] = &secondLevelCacheBucket{
-		memBucket:   s.manager.GetBucket(name),
-		redisBucket: redisCache.getBucket(bucketName).(*redisCacheBucket),
-		bucketName:  string(bucketName),
+		memBucket: s.memCacheManager.GetBucket(name),
+		redisBucket: &redisCacheBucket{
+			keyPrefix: s.baseRedisKeyPrefix + string(bucketName) + ":",
+			expire:    config.redisExpire,
+		},
+		bucketName: string(bucketName),
 	}
 	return s.buckets[name]
 }
@@ -96,8 +112,7 @@ func (s *secondLevelCacheManager) getBucket(bucketName BucketName) CacheBucket {
 type secondLevelCacheBucket struct {
 	memBucket   caching.CacheBucket
 	redisBucket *redisCacheBucket
-
-	bucketName string
+	bucketName  string
 }
 
 func (m *secondLevelCacheBucket) publicEvent(bucketName, rawCacheKey, dataSum string) {

@@ -1,9 +1,7 @@
 package cachecloud
 
 import (
-	"github.com/acexy/golang-toolkit/logger"
 	"github.com/acexy/golang-toolkit/util/coll"
-	"strings"
 	"sync"
 )
 
@@ -36,37 +34,21 @@ func Init(option Option, cacheConfigs ...CacheConfig) {
 				useRedisCache = true
 				initRedisCacheManager(redisConfigs...)
 			}
+			// 加载内存缓存设置
 			memConfigs := coll.SliceFilter(cacheConfigs, func(e CacheConfig) bool {
 				return e.typ == BucketTypeMem
 			})
-			if option.AutoEnable2LevelCache && len(memConfigs) > 0 && len(redisConfigs) > 0 {
-				leve2Configs := coll.SliceIntersection(memConfigs, coll.SliceFilter(redisConfigs, func(e CacheConfig) bool {
-					return e.typ == BucketTypeRedis
-				}), func(part1, part2 CacheConfig) bool {
-					return part1.bucketName == part2.bucketName
-				})
-
-				if len(leve2Configs) > 0 {
-					leve2MemConfigs := coll.SliceFilter(memConfigs, func(e CacheConfig) bool {
-						return coll.SliceContains(leve2Configs, e, func(c1 CacheConfig, c2 CacheConfig) bool {
-							return c1.bucketName == c2.bucketName
-						})
-					})
-					use2LCache = true
-					logger.Logrus().Debugln("已启用自动二级缓存管理，发现匹配存储桶", strings.Join(coll.SliceCollect(leve2MemConfigs, func(e CacheConfig) string {
-						return string(e.bucketName)
-					}), ","))
-					initSecondLevelCacheManager(leve2MemConfigs)
-					// 移除已被二级缓存管理的内存缓存
-					memConfigs = coll.SliceComplement(memConfigs, leve2MemConfigs, func(part1, part2 CacheConfig) bool {
-						return part1.bucketName == part2.bucketName
-					})
-				}
-			}
-			// 加载内存缓存设置
 			if len(memConfigs) > 0 {
 				useMemCache = true
 				initMemCacheManager(memConfigs...)
+			}
+			// 加载二级缓存设置
+			level2Configs := coll.SliceFilter(cacheConfigs, func(e CacheConfig) bool {
+				return e.typ == BucketTypeLevel2
+			})
+			if len(level2Configs) > 0 {
+				use2LCache = true
+				initSecondLevelCacheManager(level2Configs...)
 			}
 		}
 	})

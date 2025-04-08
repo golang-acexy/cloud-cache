@@ -1,7 +1,5 @@
 package cachecloud
 
-import "github.com/acexy/golang-toolkit/logger"
-
 type cacheManager interface {
 	// GetBucket 获取存储桶
 	getBucket(bucketName BucketName) CacheBucket
@@ -10,20 +8,16 @@ type cacheManager interface {
 func getBucket(name BucketName) CacheBucket {
 	cacheBucket := getLevel2Bucket(name)
 	if cacheBucket != nil {
-		logger.Logrus().Traceln(name, "使用二级缓存管理器处理")
 		return cacheBucket
 	}
 	cacheBucket = getDistMemBucket(name)
 	if cacheBucket != nil {
-		logger.Logrus().Traceln(name, "使用分布式内存缓存管理器处理")
 		return cacheBucket
 	}
 	cacheBucket = getMemBucket(name)
 	if cacheBucket != nil {
-		logger.Logrus().Traceln(name, "使用独立内存缓存管理器处理")
 		return cacheBucket
 	}
-	logger.Logrus().Traceln(name, "使用Redis缓存管理器处理")
 	return getRedisBucket(name)
 }
 func getBucketByType(name BucketName, typ BucketType) CacheBucket {
@@ -34,8 +28,10 @@ func getBucketByType(name BucketName, typ BucketType) CacheBucket {
 		return getRedisBucket(name)
 	case BucketTypeDistMem:
 		return getDistMemBucket(name)
-	default:
+	case BucketTypeLevel2:
 		return getLevel2Bucket(name)
+	default:
+		return nil
 	}
 }
 

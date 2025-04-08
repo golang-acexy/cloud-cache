@@ -10,6 +10,7 @@ const (
 	BucketTypeMem     BucketType = "mem"
 	BucketTypeDistMem            = "dist-mem"
 	BucketTypeRedis              = "redis"
+	BucketTypeLevel2             = "level-2"
 
 	topicDelimiter = "<@.>"
 )
@@ -34,17 +35,10 @@ type Supplier[T any] func() (T, bool)
 
 // CacheConfig 缓存key
 type CacheConfig struct {
-	bucketName BucketName    // 存储桶名称
-	expire     time.Duration // 过期时间
-	typ        BucketType    // 存储桶类型
-}
-
-func NewCacheConfig(name BucketName, expire time.Duration, typ BucketType) CacheConfig {
-	return CacheConfig{
-		bucketName: name,
-		expire:     expire,
-		typ:        typ,
-	}
+	bucketName  BucketName    // 存储桶名称
+	memExpire   time.Duration // 内存过期时间
+	redisExpire time.Duration // redis过期时间
+	typ         BucketType    // 存储桶类型
 }
 
 type CacheKey struct {

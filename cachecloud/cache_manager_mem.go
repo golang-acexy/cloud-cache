@@ -19,7 +19,7 @@ func initMemCacheManager(configs ...CacheConfig) {
 	if len(configs) > 0 {
 		manager := caching.NewEmptyCacheBucketManager()
 		for _, v := range configs {
-			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.expire))
+			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.memExpire))
 		}
 		memCache = &memCacheManager{
 			manager: manager,

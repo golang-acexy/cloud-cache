@@ -27,8 +27,7 @@ func TestLevel21(t *testing.T) {
 		cachecloud.Option{
 			AutoEnable2LevelCache: true,
 		},
-		cachecloud.NewCacheConfig(level2Bucket, time.Second*5, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(level2Bucket, time.Hour, cachecloud.BucketTypeRedis),
+		cachecloud.NewLevel2CacheConfig(level2Bucket, time.Second*5, time.Hour),
 	)
 
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
@@ -71,8 +70,7 @@ func TestLevel22(t *testing.T) {
 		cachecloud.Option{
 			AutoEnable2LevelCache: true,
 		},
-		cachecloud.NewCacheConfig(level2Bucket, time.Second*5, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(level2Bucket, time.Hour, cachecloud.BucketTypeRedis),
+		cachecloud.NewLevel2CacheConfig(level2Bucket, time.Second*5, time.Hour),
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
 
@@ -109,8 +107,7 @@ func TestLevel2Updated(t *testing.T) {
 		cachecloud.Option{
 			AutoEnable2LevelCache: true,
 		},
-		cachecloud.NewCacheConfig(level2Bucket, time.Second*5, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(level2Bucket, time.Hour, cachecloud.BucketTypeRedis),
+		cachecloud.NewLevel2CacheConfig(level2Bucket, time.Second*5, time.Hour),
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
 
@@ -133,8 +130,7 @@ func TestLevel2Deleted(t *testing.T) {
 		cachecloud.Option{
 			AutoEnable2LevelCache: true,
 		},
-		cachecloud.NewCacheConfig(level2Bucket, time.Second*5, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(level2Bucket, time.Hour, cachecloud.BucketTypeRedis),
+		cachecloud.NewLevel2CacheConfig(level2Bucket, time.Second*5, time.Hour),
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
 	_ = cachecloud.EvictCache(level2Bucket, cacheKeyTest)

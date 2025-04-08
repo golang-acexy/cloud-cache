@@ -28,7 +28,7 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 	if len(configs) > 0 {
 		manager := caching.NewEmptyCacheBucketManager()
 		for _, v := range configs {
-			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.expire))
+			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.memExpire))
 		}
 		if serviceNamePrefix != "" {
 			distMemTopicName = serviceNamePrefix + ":" + distMemTopicName

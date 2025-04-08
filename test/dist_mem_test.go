@@ -20,7 +20,7 @@ func TestDistMem1(t *testing.T) {
 	oneHourBucket := cachecloud.BucketName("1h")
 	cachecloud.Init(
 		cachecloud.Option{},
-		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem),
+		cachecloud.NewDistMemCacheConfig(oneHourBucket, time.Hour),
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
 	_ = cachecloud.PutCacheValue(oneHourBucket, cacheKeyTest, Model{
@@ -60,7 +60,7 @@ func TestDistMem2(t *testing.T) {
 	oneHourBucket := cachecloud.BucketName("1h")
 	cachecloud.Init(
 		cachecloud.Option{},
-		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem),
+		cachecloud.NewDistMemCacheConfig(oneHourBucket, time.Hour),
 	)
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
 	_ = cachecloud.PutCacheValue(oneHourBucket, cacheKeyTest, Model{
@@ -98,7 +98,7 @@ func TestDistMemUpdated(t *testing.T) {
 		return
 	}
 	oneHourBucket := cachecloud.BucketName("1h")
-	cachecloud.Init(cachecloud.Option{}, cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem))
+	cachecloud.Init(cachecloud.Option{}, cachecloud.NewDistMemCacheConfig(oneHourBucket, time.Hour))
 
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
 	_ = cachecloud.PutCacheValue(oneHourBucket, cacheKeyTest, Model{
@@ -118,7 +118,7 @@ func TestDistMemDeleted(t *testing.T) {
 	oneHourBucket := cachecloud.BucketName("1h")
 	cachecloud.Init(
 		cachecloud.Option{},
-		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeDistMem),
+		cachecloud.NewDistMemCacheConfig(oneHourBucket, time.Hour),
 	)
 
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}

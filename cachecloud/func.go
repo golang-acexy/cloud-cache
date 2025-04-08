@@ -1,6 +1,46 @@
 package cachecloud
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
+
+// NewMemCacheConfig 创建一个内存缓存配置
+func NewMemCacheConfig(name BucketName, expire time.Duration) CacheConfig {
+	return CacheConfig{
+		bucketName: name,
+		memExpire:  expire,
+		typ:        BucketTypeMem,
+	}
+}
+
+// NewDistMemCacheConfig 创建一个分布式内存缓存配置
+func NewDistMemCacheConfig(name BucketName, expire time.Duration) CacheConfig {
+	return CacheConfig{
+		bucketName: name,
+		memExpire:  expire,
+		typ:        BucketTypeDistMem,
+	}
+}
+
+// NewRedisCacheConfig 创建一个redis缓存配置
+func NewRedisCacheConfig(name BucketName, expire time.Duration) CacheConfig {
+	return CacheConfig{
+		bucketName:  name,
+		redisExpire: expire,
+		typ:         BucketTypeRedis,
+	}
+}
+
+// NewLevel2CacheConfig 创建一个二级缓存配置
+func NewLevel2CacheConfig(name BucketName, memExpire, redisExpire time.Duration) CacheConfig {
+	return CacheConfig{
+		bucketName:  name,
+		memExpire:   memExpire,
+		redisExpire: redisExpire,
+		typ:         BucketTypeLevel2,
+	}
+}
 
 // NewCacheKey 创建一个缓存key
 func NewCacheKey(format string) CacheKey {
@@ -15,11 +55,6 @@ func GetBucket(bucketName BucketName) CacheBucket {
 // GetBucketByType 通过指定的存储桶和类型，获取存储桶实例
 func GetBucketByType(bucketName BucketName, typ BucketType) CacheBucket {
 	return getBucketByType(bucketName, typ)
-}
-
-// GetLevel2Bucket 通过指定的存储桶，获取二级缓存实例
-func GetLevel2Bucket(bucketName BucketName) CacheBucket {
-	return getLevel2Bucket(bucketName)
 }
 
 // GetCacheValue 通过指定的存储桶和缓存key，获取缓存值
