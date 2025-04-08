@@ -47,7 +47,7 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 				key := caching.NewNemCacheKey(cacheKey)
 				bucket := manager.GetBucket(bucketName)
 				if sum == "" {
-					logger.Logrus().Traceln("分布式缓存值已删除", bucketName, cacheKey)
+					logger.Logrus().Traceln("二级缓存内存缓存值已删除", bucketName, cacheKey)
 					_ = bucket.Evict(key)
 					return
 				}
@@ -56,7 +56,7 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 					md5Array := hashing.Md5Bytes(bytes)
 					currentSum := hex.EncodeToString(md5Array[:])
 					if sum != currentSum {
-						logger.Logrus().Traceln("分布式缓存值已变化", bucketName, cacheKey)
+						logger.Logrus().Traceln("二级缓存内存缓存值已变化", bucketName, cacheKey)
 						_ = bucket.Evict(key)
 					}
 				}
