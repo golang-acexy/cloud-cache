@@ -36,7 +36,6 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 		}
 		distMemTopicCmd.SubscribeRetry(context.Background(), redisstarter.NewRedisKey(distMemTopicName), func(v *redis.Message) {
 			if !strings.HasPrefix(v.Payload, getNodeId()) {
-				logger.Logrus().Traceln("分布式内存缓存消息同步数据", v.String())
 				split := strings.SplitN(v.Payload, topicDelimiter, 4)
 				bucketName := split[1]
 				cacheKey := split[2]
