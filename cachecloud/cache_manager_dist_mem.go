@@ -42,10 +42,15 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 				cacheKey := split[2]
 				sum := split[3]
 				key := caching.NewNemCacheKey(cacheKey)
-				bucket := manager.GetBucket(bucketName)
+				manage := distMemCache.buckets[bucketName]
+				bucket := manage.bucket
 				if sum == "" {
-					logger.Logrus().Traceln("分布式缓存值已删除", bucketName, cacheKey)
-					_ = bucket.Evict(key)
+					err := bucket.Evict(key)
+					if err != nil {
+						logger.Logrus().Traceln("分布式缓存值已删除", bucketName, cacheKey)
+					} else {
+						logger.Logrus().Errorln("分布式缓存值删除失败", bucketName, cacheKey, err)
+					}
 					return
 				}
 				bytes, e := bucket.GetBytes(key)
