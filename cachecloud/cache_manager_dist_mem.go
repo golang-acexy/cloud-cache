@@ -44,10 +44,8 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 				bucket := manager.GetBucket(bucketName)
 				if sum == "" {
 					err := bucket.Evict(key)
-					if err != nil {
+					if err == nil {
 						logger.Logrus().Traceln("分布式内存缓存值已删除", bucketName, cacheKey)
-					} else {
-						logger.Logrus().Errorln("分布式内存缓存值删除失败", bucketName, cacheKey, err)
 					}
 					return
 				}

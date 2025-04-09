@@ -48,9 +48,7 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 				bucket := manager.GetBucket(bucketName)
 				if sum == "" {
 					err := bucket.Evict(key)
-					if err != nil {
-						logger.Logrus().Errorln("二级缓存内存缓存值删除失败", bucketName, cacheKey, err)
-					} else {
+					if err == nil {
 						logger.Logrus().Traceln("二级缓存内存缓存值已删除", bucketName, cacheKey)
 					}
 					return
