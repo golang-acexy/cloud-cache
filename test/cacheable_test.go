@@ -15,7 +15,7 @@ func TestCacheable(t *testing.T) {
 
 	cachecloud.Init(
 		cachecloud.Option{},
-		cachecloud.NewCacheConfig(fiveSecBucket, time.Second*5, cachecloud.BucketTypeMem),
+		cachecloud.NewMemCacheConfig(fiveSecBucket, time.Second*5),
 	)
 
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}

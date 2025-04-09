@@ -27,16 +27,15 @@ func TestLevel21(t *testing.T) {
 		cachecloud.Option{
 			AutoEnable2LevelCache: true,
 		},
-		cachecloud.NewCacheConfig(level2Bucket, time.Second*5, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(level2Bucket, time.Hour, cachecloud.BucketTypeRedis),
+		cachecloud.NewLevel2CacheConfig(level2Bucket, time.Second*5, time.Hour),
 	)
 
-	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
+	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test%d"}
 	_ = cachecloud.PutCacheValue(level2Bucket, cacheKeyTest, Model{
 		Name: "acexy1",
 		Sex:  0,
 		Age:  38,
-	})
+	}, 1)
 
 	done := make(chan bool)
 	go func() {
@@ -47,7 +46,7 @@ func TestLevel21(t *testing.T) {
 			default:
 				// 获取1秒缓存数据
 				var value Model
-				_ = cachecloud.GetCacheValue(level2Bucket, cacheKeyTest, &value)
+				_ = cachecloud.GetCacheValue(level2Bucket, cacheKeyTest, &value, 1)
 				fmt.Println(json.ToJson(value))
 				time.Sleep(time.Second)
 			}
@@ -71,10 +70,9 @@ func TestLevel22(t *testing.T) {
 		cachecloud.Option{
 			AutoEnable2LevelCache: true,
 		},
-		cachecloud.NewCacheConfig(level2Bucket, time.Second*5, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(level2Bucket, time.Hour, cachecloud.BucketTypeRedis),
+		cachecloud.NewLevel2CacheConfig(level2Bucket, time.Second*5, time.Hour),
 	)
-	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
+	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test%d"}
 
 	done := make(chan bool)
 	go func() {
@@ -85,7 +83,7 @@ func TestLevel22(t *testing.T) {
 			default:
 				// 获取1秒缓存数据
 				var value Model
-				_ = cachecloud.GetCacheValue(level2Bucket, cacheKeyTest, &value)
+				_ = cachecloud.GetCacheValue(level2Bucket, cacheKeyTest, &value, 1)
 				fmt.Println(json.ToJson(value))
 				time.Sleep(time.Second)
 			}
@@ -109,16 +107,15 @@ func TestLevel2Updated(t *testing.T) {
 		cachecloud.Option{
 			AutoEnable2LevelCache: true,
 		},
-		cachecloud.NewCacheConfig(level2Bucket, time.Second*5, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(level2Bucket, time.Hour, cachecloud.BucketTypeRedis),
+		cachecloud.NewLevel2CacheConfig(level2Bucket, time.Second*5, time.Hour),
 	)
-	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
+	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test%d"}
 
 	_ = cachecloud.PutCacheValue(level2Bucket, cacheKeyTest, Model{
 		Name: "acexy",
 		Sex:  1,
 		Age:  19,
-	})
+	}, 1)
 }
 
 func TestLevel2Deleted(t *testing.T) {
@@ -133,9 +130,8 @@ func TestLevel2Deleted(t *testing.T) {
 		cachecloud.Option{
 			AutoEnable2LevelCache: true,
 		},
-		cachecloud.NewCacheConfig(level2Bucket, time.Second*5, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(level2Bucket, time.Hour, cachecloud.BucketTypeRedis),
+		cachecloud.NewLevel2CacheConfig(level2Bucket, time.Second*5, time.Hour),
 	)
-	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
-	_ = cachecloud.EvictCache(level2Bucket, cacheKeyTest)
+	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test%d"}
+	_ = cachecloud.EvictCache(level2Bucket, cacheKeyTest, 1)
 }

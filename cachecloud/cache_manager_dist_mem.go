@@ -9,6 +9,7 @@ import (
 	"github.com/acexy/golang-toolkit/logger"
 	"github.com/acexy/golang-toolkit/util/gob"
 	"github.com/golang-acexy/starter-redis/redisstarter"
+	"github.com/redis/go-redis/v9"
 	"strings"
 	"sync"
 )
@@ -28,42 +29,37 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 	if len(configs) > 0 {
 		manager := caching.NewEmptyCacheBucketManager()
 		for _, v := range configs {
-			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.expire))
+			manager.AddBucket(string(v.bucketName), caching.NewSimpleBigCache(v.memExpire))
 		}
 		if serviceNamePrefix != "" {
 			distMemTopicName = serviceNamePrefix + ":" + distMemTopicName
 		}
-		subscribe, err := distMemTopicCmd.Subscribe(context.Background(), redisstarter.NewRedisKey(distMemTopicName))
-		if err != nil {
-			logger.Logrus().Errorln("初始化分布式内存缓存同步订阅事件失败", distMemTopicName, err)
-		}
-		go func() {
-			for v := range subscribe {
-				if !strings.HasPrefix(v.Payload, getNodeId()) {
-					logger.Logrus().Traceln("分布式内存缓存消息同步数据", v.String())
-					split := strings.SplitN(v.Payload, topicDelimiter, 4)
-					bucketName := split[1]
-					cacheKey := split[2]
-					sum := split[3]
-					key := caching.NewNemCacheKey(cacheKey)
-					bucket := manager.GetBucket(bucketName)
-					if sum == "" {
-						logger.Logrus().Traceln("分布式缓存值已删除", bucketName, cacheKey)
-						_ = bucket.Evict(key)
-						return
+		distMemTopicCmd.SubscribeRetry(context.Background(), redisstarter.NewRedisKey(distMemTopicName), func(v *redis.Message) {
+			if !strings.HasPrefix(v.Payload, getNodeId()) {
+				split := strings.SplitN(v.Payload, topicDelimiter, 4)
+				bucketName := split[1]
+				cacheKey := split[2]
+				sum := split[3]
+				key := caching.NewNemCacheKey(cacheKey)
+				bucket := manager.GetBucket(bucketName)
+				if sum == "" {
+					err := bucket.Evict(key)
+					if err == nil {
+						logger.Logrus().Traceln("分布式内存缓存值已删除", bucketName, cacheKey)
 					}
-					bytes, e := bucket.GetBytes(key)
-					if e == nil {
-						md5Array := hashing.Md5Bytes(bytes)
-						currentSum := hex.EncodeToString(md5Array[:])
-						if sum != currentSum {
-							logger.Logrus().Traceln("分布式缓存值已变化", bucketName, cacheKey)
-							_ = bucket.Evict(key)
-						}
+					return
+				}
+				bytes, e := bucket.GetBytes(key)
+				if e == nil {
+					md5Bytes := hashing.Md5Bytes(bytes)
+					currentSum := hex.EncodeToString(md5Bytes[:])
+					if sum != currentSum {
+						logger.Logrus().Traceln("分布式内存缓存值已变化", bucketName, cacheKey)
+						_ = bucket.Evict(key)
 					}
 				}
 			}
-		}()
+		})
 		distMemCache = &distMemCacheManager{
 			manager: manager,
 			buckets: make(map[string]*distMemeCacheBucket),

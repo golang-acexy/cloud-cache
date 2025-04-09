@@ -28,7 +28,7 @@ func initRedisCacheManager(configs ...CacheConfig) {
 		coll.SliceForeachAll(configs, func(config CacheConfig) {
 			redisCache.buckets[config.bucketName] = &redisCacheBucket{
 				keyPrefix: keyPrefix + string(config.bucketName) + ":",
-				expire:    config.expire,
+				expire:    config.redisExpire,
 			}
 		})
 	}

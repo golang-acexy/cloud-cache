@@ -19,8 +19,8 @@ func TestMem(t *testing.T) {
 	oneHourBucket := cachecloud.BucketName("1h")
 
 	cachecloud.Init(
-		cachecloud.Option{}, cachecloud.NewCacheConfig(oneSecBucket, time.Second, cachecloud.BucketTypeMem),
-		cachecloud.NewCacheConfig(oneHourBucket, time.Hour, cachecloud.BucketTypeMem),
+		cachecloud.Option{}, cachecloud.NewMemCacheConfig(oneSecBucket, time.Second),
+		cachecloud.NewMemCacheConfig(oneHourBucket, time.Hour),
 	)
 
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
