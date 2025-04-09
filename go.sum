@@ -1,5 +1,6 @@
 github.com/acexy/golang-toolkit v0.0.45-0.20250401025245-e513ddecb530 h1:NuFKDXD2oF4+f2l3v/MU3iybEdS4l2PrRc1Ez3fSXlc=
 github.com/acexy/golang-toolkit v0.0.45-0.20250401025245-e513ddecb530/go.mod h1:He833/0n/wP1Ij/osLIazvdwlrIxT8yOsdcw74U3B7c=
+github.com/acexy/golang-toolkit v0.0.45/go.mod h1:PeEv7vAjBD2sa+xAxgEuWL4+Km92Ox2tYjaTigPEbNE=
 github.com/allegro/bigcache/v3 v3.1.0 h1:H2Vp8VOvxcrB91o86fUSVJFqeuz8kpyyB02eH3bSzwk=
 github.com/allegro/bigcache/v3 v3.1.0/go.mod h1:aPyh7jEvrog9zAwx5N7+JUQX5dZTSGpxF1LAR4dr35I=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
@@ -21,6 +22,8 @@ github.com/golang-acexy/starter-redis v0.1.9-0.20250408112437-aabc9973d7e2 h1:fA
 github.com/golang-acexy/starter-redis v0.1.9-0.20250408112437-aabc9973d7e2/go.mod h1:XrK+B4Dx/7M/2T9UTdNIlewgkfQ3nuH5MBJ59QIUDgs=
 github.com/golang-acexy/starter-redis v0.1.9-0.20250408113950-d3a84975159f h1:ZSKzk5Wbng6QToDwQ0a4Jyzv1yHCBqXzA9GEK6zoUbc=
 github.com/golang-acexy/starter-redis v0.1.9-0.20250408113950-d3a84975159f/go.mod h1:XrK+B4Dx/7M/2T9UTdNIlewgkfQ3nuH5MBJ59QIUDgs=
+github.com/golang-acexy/starter-redis v0.1.9-0.20250409033806-c50e6b8d2eb2 h1:9XhYhN53ZpSW7o1UdlkXw8TNViBaVusY1goKJPFaq9A=
+github.com/golang-acexy/starter-redis v0.1.9-0.20250409033806-c50e6b8d2eb2/go.mod h1:hCq+nOfjP6oLcGZATQ9DH2A9vGr1W0dkuWcUH/fWJKg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
