@@ -42,8 +42,7 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 				cacheKey := split[2]
 				sum := split[3]
 				key := caching.NewNemCacheKey(cacheKey)
-				manage := distMemCache.buckets[bucketName]
-				bucket := manage.bucket
+				bucket := manager.GetBucket(bucketName)
 				if sum == "" {
 					err := bucket.Evict(key)
 					if err != nil {

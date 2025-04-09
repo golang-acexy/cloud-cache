@@ -45,8 +45,7 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 				cacheKey := split[2]
 				sum := split[3]
 				key := caching.NewNemCacheKey(cacheKey)
-				level2Manager := level2Cache.buckets[bucketName]
-				bucket := level2Manager.memBucket
+				bucket := manager.GetBucket(bucketName)
 				logger.Logrus().Traceln("收到二级缓存内存缓存变化事件", bucketName, cacheKey, sum)
 				if sum == "" {
 					err := bucket.Evict(key)
