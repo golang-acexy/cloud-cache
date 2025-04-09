@@ -39,7 +39,6 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 			level2TopicName = serviceNamePrefix + ":" + level2TopicName
 		}
 		level2TopicCmd.SubscribeRetry(context.Background(), redisstarter.NewRedisKey(level2TopicName), func(v *redis.Message) {
-			logger.Logrus().Traceln("收到二级缓存内存缓存变化事件", v.Payload)
 			if !strings.HasPrefix(v.Payload, getNodeId()) {
 				split := strings.SplitN(v.Payload, topicDelimiter, 4)
 				bucketName := split[1]
@@ -47,9 +46,10 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 				sum := split[3]
 				key := caching.NewNemCacheKey(cacheKey)
 				bucket := manager.GetBucket(bucketName)
+				logger.Logrus().Traceln("收到二级缓存内存缓存变化事件", bucketName, cacheKey, sum)
 				if sum == "" {
-					logger.Logrus().Traceln("二级缓存内存缓存值已删除", bucketName, cacheKey)
-					_ = bucket.Evict(key)
+					err := bucket.Evict(key)
+					logger.Logrus().Traceln("二级缓存内存缓存值已删除", bucketName, cacheKey, err)
 					return
 				}
 				bytes, e := bucket.GetBytes(key)
