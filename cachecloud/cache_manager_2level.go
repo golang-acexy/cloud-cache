@@ -39,6 +39,7 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 			level2TopicName = serviceNamePrefix + ":" + level2TopicName
 		}
 		level2TopicCmd.SubscribeRetry(context.Background(), redisstarter.NewRedisKey(level2TopicName), func(v *redis.Message) {
+			logger.Logrus().Traceln("收到二级缓存内存缓存变化事件", v.Payload)
 			if !strings.HasPrefix(v.Payload, getNodeId()) {
 				split := strings.SplitN(v.Payload, topicDelimiter, 4)
 				bucketName := split[1]
@@ -53,8 +54,8 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 				}
 				bytes, e := bucket.GetBytes(key)
 				if e == nil {
-					md5Array := hashing.Md5Bytes(bytes)
-					currentSum := hex.EncodeToString(md5Array[:])
+					md5Bytes := hashing.Md5Bytes(bytes)
+					currentSum := hex.EncodeToString(md5Bytes[:])
 					if sum != currentSum {
 						logger.Logrus().Traceln("二级缓存内存缓存值已变化", bucketName, cacheKey)
 						_ = bucket.Evict(key)
@@ -91,7 +92,7 @@ func (s *secondLevelCacheManager) getBucket(bucketName BucketName) CacheBucket {
 		return item.bucketName == bucketName
 	})
 	s.buckets[name] = &secondLevelCacheBucket{
-		memBucket: s.memCacheManager.GetBucket(name),
+		memBucket: manager,
 		redisBucket: &redisCacheBucket{
 			keyPrefix: s.baseRedisKeyPrefix + string(bucketName) + ":",
 			expire:    config.redisExpire,
@@ -135,8 +136,8 @@ func (m *secondLevelCacheBucket) Put(key CacheKey, data any, keyAppend ...interf
 	if err == nil {
 		// 同步缓存数据发生变化的事件
 		encode, _ := gob.Encode(data)
-		md5Array := hashing.Md5Bytes(encode)
-		m.publicEvent(m.bucketName, key.RawKeyString(keyAppend...), hex.EncodeToString(md5Array[:]))
+		md5Bytes := hashing.Md5Bytes(encode)
+		m.publicEvent(m.bucketName, key.RawKeyString(keyAppend...), hex.EncodeToString(md5Bytes[:]))
 	}
 	return err
 }
@@ -144,9 +145,6 @@ func (m *secondLevelCacheBucket) Put(key CacheKey, data any, keyAppend ...interf
 func (m *secondLevelCacheBucket) Evict(key CacheKey, keyAppend ...interface{}) error {
 	_ = m.redisBucket.Evict(key, keyAppend...)
 	err := m.memBucket.Evict(caching.NewNemCacheKey(key.KeyFormat), keyAppend...)
-	if err != nil {
-		// 同步缓存数据删除事件
-		m.publicEvent(m.bucketName, key.RawKeyString(keyAppend...), "")
-	}
+	m.publicEvent(m.bucketName, key.RawKeyString(keyAppend...), "")
 	return err
 }
