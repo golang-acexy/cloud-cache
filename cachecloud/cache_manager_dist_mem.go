@@ -35,7 +35,6 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 			distMemTopicName = serviceNamePrefix + ":" + distMemTopicName
 		}
 		distMemTopicCmd.SubscribeRetry(context.Background(), redisstarter.NewRedisKey(distMemTopicName), func(v *redis.Message) {
-			logger.Logrus().Traceln("收到分布式内存缓存变化事件", v.Payload)
 			if !strings.HasPrefix(v.Payload, getNodeId()) {
 				split := strings.SplitN(v.Payload, topicDelimiter, 4)
 				bucketName := split[1]
@@ -46,9 +45,9 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 				if sum == "" {
 					err := bucket.Evict(key)
 					if err != nil {
-						logger.Logrus().Traceln("分布式缓存值已删除", bucketName, cacheKey)
+						logger.Logrus().Traceln("分布式内存缓存值已删除", bucketName, cacheKey)
 					} else {
-						logger.Logrus().Errorln("分布式缓存值删除失败", bucketName, cacheKey, err)
+						logger.Logrus().Errorln("分布式内存缓存值删除失败", bucketName, cacheKey, err)
 					}
 					return
 				}
@@ -57,7 +56,7 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 					md5Bytes := hashing.Md5Bytes(bytes)
 					currentSum := hex.EncodeToString(md5Bytes[:])
 					if sum != currentSum {
-						logger.Logrus().Traceln("分布式缓存值已变化", bucketName, cacheKey)
+						logger.Logrus().Traceln("分布式内存缓存值已变化", bucketName, cacheKey)
 						_ = bucket.Evict(key)
 					}
 				}
