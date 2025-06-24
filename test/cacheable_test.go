@@ -19,7 +19,6 @@ func TestCacheable(t *testing.T) {
 	)
 
 	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
-
 	done := make(chan bool)
 	go func() {
 		for {
