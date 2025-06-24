@@ -29,10 +29,10 @@ func TestCacheable(t *testing.T) {
 			default:
 				// 获取1秒缓存数据
 				var result int
-				err := cachecloud.Cacheable[int](fiveSecBucket, cacheKeyTest, &result, func() (int, bool) {
+				err := cachecloud.Cacheable[int](fiveSecBucket, cacheKeyTest, &result, func() (*int, bool) {
 					newValue := random.RandInt(10)
 					logger.Logrus().Debugln("获取新值", newValue)
-					return newValue, true
+					return &newValue, true
 				})
 				if err != nil {
 					return
