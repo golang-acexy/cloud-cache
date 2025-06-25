@@ -15,6 +15,9 @@ import (
 	"sync"
 )
 
+// 二级缓存：内存缓存作为一级 redis缓存为二级，如果内存缓存中没有发现会查看redis，如果redis存在会重建内存缓存
+// 由于重建的情况存在，所以内存缓存的过期时间在多个实例时可能不会一致，需要合理设计内存过期时间和redis的过期时间以及使用场景
+
 var level2Cache *secondLevelCacheManager
 var level2TopicCmd = redisstarter.TopicCmd()
 var level2TopicName = "2l-mem-sync-topic"
