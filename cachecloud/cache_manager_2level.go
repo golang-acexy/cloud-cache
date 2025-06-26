@@ -89,7 +89,6 @@ func (s *secondLevelCacheManager) getBucket(bucketName BucketName) CacheBucket {
 	s.mutex.Lock()
 	manager := s.memCacheManager.GetBucket(name)
 	if manager == nil {
-		s.buckets[name] = nil
 		return nil
 	}
 	config, _ := coll.SliceFilterFirstOne(s.configs, func(item CacheConfig) bool {
