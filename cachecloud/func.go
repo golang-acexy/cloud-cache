@@ -85,7 +85,7 @@ func EvictCache(bucketName BucketName, cacheKey CacheKey, keyAppend ...interface
 }
 
 // Cacheable 通过指定的存储桶和缓存key，获取缓存值，如果缓存值不存在，则调用supplier获取值，并设置缓存值
-func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, supplier Supplier[T], keyAppend ...interface{}) error {
+func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, supplier Supplier[*T], keyAppend ...interface{}) error {
 	bucket := getBucket(bucketName)
 	if bucket == nil {
 		return errors.New("bucket not found")
@@ -95,7 +95,7 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, suppl
 		if supplier != nil {
 			value, flag := supplier()
 			if flag {
-				*result = value
+				*result = *value
 				return bucket.Put(cacheKey, value, keyAppend...)
 			} else {
 				return CacheMiss

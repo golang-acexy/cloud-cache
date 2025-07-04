@@ -3,10 +3,10 @@ module github.com/golang-acexy/cloud-cache
 go 1.23.5
 
 require (
-	github.com/acexy/golang-toolkit v0.0.45
-	github.com/golang-acexy/starter-parent v0.1.15
+	github.com/acexy/golang-toolkit v0.0.49
+	github.com/golang-acexy/starter-parent v0.1.16
 	github.com/golang-acexy/starter-redis v0.1.9
-	github.com/redis/go-redis/v9 v9.7.3
+	github.com/redis/go-redis/v9 v9.11.0
 )
 
 require (
@@ -21,6 +21,6 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/timandy/routine v1.1.5 // indirect
-	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )

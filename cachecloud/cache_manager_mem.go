@@ -33,6 +33,9 @@ func (m *memCacheManager) getBucket(bucketName BucketName) CacheBucket {
 	if bucket, ok := m.buckets[name]; ok {
 		return bucket
 	}
+	if m.manager.GetBucket(name) == nil {
+		return nil
+	}
 	defer m.blocker.Unlock()
 	m.blocker.Lock()
 	m.buckets[name] = &memeCacheBucket{
