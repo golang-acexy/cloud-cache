@@ -17,6 +17,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/r
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
 github.com/golang-acexy/starter-parent v0.1.15 h1:poaYgB7hNXU1/jgOZrj78if27E+Gd1FTlaupR9qNLnE=
 github.com/golang-acexy/starter-parent v0.1.15/go.mod h1:iWg08DKgDSGqsUjAPPoNghR/8p6zhT3FdEFOygyrSwM=
+github.com/golang-acexy/starter-parent v0.1.16 h1:ruT1FM4BoMO64MbTnrAJsHAhitcRCs5nsv27eqAXfjQ=
+github.com/golang-acexy/starter-parent v0.1.16/go.mod h1:NG/oDFsqTOOKwL4rFxPxokfYeVraGB+qU951La+LTFc=
 github.com/golang-acexy/starter-redis v0.1.9 h1:Oe5oXMtz4OtQ9E1jYtd/iaHrYDXMYx74ouCJ2bsSTv0=
 github.com/golang-acexy/starter-redis v0.1.9/go.mod h1:hCq+nOfjP6oLcGZATQ9DH2A9vGr1W0dkuWcUH/fWJKg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
