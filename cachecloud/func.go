@@ -2,6 +2,7 @@ package cachecloud
 
 import (
 	"errors"
+	"github.com/acexy/golang-toolkit/logger"
 	"time"
 )
 
@@ -98,7 +99,7 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, suppl
 				*result = *value
 				return bucket.Put(cacheKey, value, keyAppend...)
 			} else {
-				return CacheMiss
+				logger.Logrus().Warningln("rebuild cache failed, supplier get nil data")
 			}
 		}
 	}
