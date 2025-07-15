@@ -99,7 +99,7 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, suppl
 				*result = *value
 				return bucket.Put(cacheKey, value, keyAppend...)
 			} else {
-				logger.Logrus().Warningln("rebuild cache failed, supplier get nil data")
+				logger.Logrus().Traceln("rebuild cache failed, supplier get nil data")
 			}
 		}
 	}
