@@ -36,14 +36,14 @@ func TestMem(t *testing.T) {
 	})
 
 	// 获取1秒缓存数据
-	var value Model
+	var value *Model
 	_ = cachecloud.GetCacheValue(oneSecBucket, cacheKeyTest, &value)
 	fmt.Println(json.ToJson(value))
 	_ = cachecloud.GetCacheValue(oneHourBucket, cacheKeyTest, &value)
 	fmt.Println(json.ToJson(value))
 
 	// 等待1秒缓存过期后再次获取
-	var value1 Model
+	var value1 *Model
 	time.Sleep(time.Second * 3)
 	fmt.Println("等待3秒后继续获取")
 	_ = cachecloud.GetCacheValue(oneSecBucket, cacheKeyTest, &value1)
@@ -54,7 +54,7 @@ func TestMem(t *testing.T) {
 	// 清除缓存
 	fmt.Println("清除缓存后获取")
 	_ = cachecloud.EvictCache(oneHourBucket, cacheKeyTest)
-	var value2 Model
+	var value2 *Model
 	_ = cachecloud.GetCacheValue(oneHourBucket, cacheKeyTest, &value2)
 	fmt.Println(json.ToJson(value2))
 }
