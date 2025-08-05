@@ -58,3 +58,18 @@ func TestMem(t *testing.T) {
 	_ = cachecloud.GetCacheValue(oneHourBucket, cacheKeyTest, &value2)
 	fmt.Println(json.ToJson(value2))
 }
+
+func TestBugFix(t *testing.T) {
+	const (
+		BucketL225Day cachecloud.BucketName = "l2-25-day" // 二级缓存规则： 25天过期
+		BucketMem1Day cachecloud.BucketName = "mem-1-day" // 内存缓存规则： 1天过期
+	)
+
+	bucket := []cachecloud.CacheConfig{
+		cachecloud.NewLevel2CacheConfig(BucketL225Day, time.Hour*24*5, time.Hour*24*25),
+		cachecloud.NewMemCacheConfig(BucketMem1Day, time.Hour*24),
+	}
+	cachecloud.Init(cachecloud.Option{}, bucket...)
+
+	cachecloud.GetBucket(BucketMem1Day)
+}

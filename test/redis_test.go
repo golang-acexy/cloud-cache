@@ -20,13 +20,16 @@ var cluster = &redisstarter.RedisStarter{
 	},
 }
 
-func TestRedis(t *testing.T) {
+func init() {
 	loader := parent.NewStarterLoader([]parent.Starter{cluster})
 	err := loader.Start()
 	if err != nil {
 		fmt.Printf("%+v\n", err)
 		return
 	}
+}
+func TestRedis(t *testing.T) {
+
 	oneSecBucket := cachecloud.BucketName("1s")
 	oneHourBucket := cachecloud.BucketName("1h")
 

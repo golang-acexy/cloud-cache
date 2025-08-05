@@ -3,7 +3,7 @@ module github.com/golang-acexy/cloud-cache
 go 1.23.5
 
 require (
-	github.com/acexy/golang-toolkit v0.0.49
+	github.com/acexy/golang-toolkit v0.0.50-0.20250805101105-eab535c0626c
 	github.com/golang-acexy/starter-parent v0.1.16
 	github.com/golang-acexy/starter-redis v0.1.11-0.20250805063922-c4a74614e783
 	github.com/redis/go-redis/v9 v9.11.0

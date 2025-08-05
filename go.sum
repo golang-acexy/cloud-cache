@@ -1,5 +1,5 @@
-github.com/acexy/golang-toolkit v0.0.49 h1:FGhZRa/+3pwj8nyxbPHi2qJP1Ay0K0tZ8ZLby0xhwAk=
-github.com/acexy/golang-toolkit v0.0.49/go.mod h1:XXGTXOj42+WbQfnYlSHwSjW4RGC20uXXZenKvM5Y3fM=
+github.com/acexy/golang-toolkit v0.0.50-0.20250805101105-eab535c0626c h1:5VgEninVNNk0368q5ssTZzscoz9Pb5Aw65CCqvAIc1A=
+github.com/acexy/golang-toolkit v0.0.50-0.20250805101105-eab535c0626c/go.mod h1:RYTivpQtEABgpBhzv+hq7yF42hLgAVi9uPaCc803Ne8=
 github.com/allegro/bigcache/v3 v3.1.0 h1:H2Vp8VOvxcrB91o86fUSVJFqeuz8kpyyB02eH3bSzwk=
 github.com/allegro/bigcache/v3 v3.1.0/go.mod h1:aPyh7jEvrog9zAwx5N7+JUQX5dZTSGpxF1LAR4dr35I=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
@@ -15,12 +15,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
-github.com/golang-acexy/starter-parent v0.1.15 h1:poaYgB7hNXU1/jgOZrj78if27E+Gd1FTlaupR9qNLnE=
-github.com/golang-acexy/starter-parent v0.1.15/go.mod h1:iWg08DKgDSGqsUjAPPoNghR/8p6zhT3FdEFOygyrSwM=
 github.com/golang-acexy/starter-parent v0.1.16 h1:ruT1FM4BoMO64MbTnrAJsHAhitcRCs5nsv27eqAXfjQ=
 github.com/golang-acexy/starter-parent v0.1.16/go.mod h1:NG/oDFsqTOOKwL4rFxPxokfYeVraGB+qU951La+LTFc=
-github.com/golang-acexy/starter-redis v0.1.9 h1:Oe5oXMtz4OtQ9E1jYtd/iaHrYDXMYx74ouCJ2bsSTv0=
-github.com/golang-acexy/starter-redis v0.1.9/go.mod h1:hCq+nOfjP6oLcGZATQ9DH2A9vGr1W0dkuWcUH/fWJKg=
 github.com/golang-acexy/starter-redis v0.1.11-0.20250805063922-c4a74614e783 h1:YPJKv6zrTii4/hdWKKgN2Q9JPkl/c/wkISz2S8ZvOFw=
 github.com/golang-acexy/starter-redis v0.1.11-0.20250805063922-c4a74614e783/go.mod h1:6qpxGEISPIVoj0X4G/+yVmzQSwTRF8pjUPQyic/BIVE=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
@@ -49,8 +45,6 @@ github.com/tidwall/pretty v1.2.1/go.mod h1:ITEVvHYasfjBbM0u2Pg8T2nJnzm8xPwvNhhso
 github.com/timandy/routine v1.1.5 h1:LSpm7Iijwb9imIPlucl4krpr2EeCeAUvifiQ9Uf5X+M=
 github.com/timandy/routine v1.1.5/go.mod h1:kXslgIosdY8LW0byTyPnenDgn4/azt2euufAq9rK51w=
 golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.33.0 h1:q3i8TbbEz+JRD9ywIRlyRAQbM0qF7hu24q3teo2hbuw=
-golang.org/x/sys v0.33.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=
 golang.org/x/sys v0.34.0 h1:H5Y5sJ2L2JRdyv7ROF1he/lPdvFsd0mJHFw2ThKHxLA=
 golang.org/x/sys v0.34.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
