@@ -21,6 +21,8 @@ github.com/golang-acexy/starter-parent v0.1.16 h1:ruT1FM4BoMO64MbTnrAJsHAhitcRCs
 github.com/golang-acexy/starter-parent v0.1.16/go.mod h1:NG/oDFsqTOOKwL4rFxPxokfYeVraGB+qU951La+LTFc=
 github.com/golang-acexy/starter-redis v0.1.9 h1:Oe5oXMtz4OtQ9E1jYtd/iaHrYDXMYx74ouCJ2bsSTv0=
 github.com/golang-acexy/starter-redis v0.1.9/go.mod h1:hCq+nOfjP6oLcGZATQ9DH2A9vGr1W0dkuWcUH/fWJKg=
+github.com/golang-acexy/starter-redis v0.1.11-0.20250805063922-c4a74614e783 h1:YPJKv6zrTii4/hdWKKgN2Q9JPkl/c/wkISz2S8ZvOFw=
+github.com/golang-acexy/starter-redis v0.1.11-0.20250805063922-c4a74614e783/go.mod h1:6qpxGEISPIVoj0X4G/+yVmzQSwTRF8pjUPQyic/BIVE=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/iancoleman/strcase v0.3.0 h1:nTXanmYxhfFAMjZL34Ov6gkzEsSJZ5DbhxWjvSASxEI=
@@ -49,6 +51,8 @@ github.com/timandy/routine v1.1.5/go.mod h1:kXslgIosdY8LW0byTyPnenDgn4/azt2euufA
 golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.33.0 h1:q3i8TbbEz+JRD9ywIRlyRAQbM0qF7hu24q3teo2hbuw=
 golang.org/x/sys v0.33.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=
+golang.org/x/sys v0.34.0 h1:H5Y5sJ2L2JRdyv7ROF1he/lPdvFsd0mJHFw2ThKHxLA=
+golang.org/x/sys v0.34.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/natefinch/lumberjack.v2 v2.2.1 h1:bBRl1b0OH9s/DuPhuXpNl+VtCaJXFZ5/uEFST95x9zc=
 gopkg.in/natefinch/lumberjack.v2 v2.2.1/go.mod h1:YD8tP3GAjkrDg1eZH7EGmyESg/lsYskCTPBJVb9jqSc=
