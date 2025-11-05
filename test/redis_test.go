@@ -2,13 +2,14 @@ package test
 
 import (
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/acexy/golang-toolkit/util/json"
 	"github.com/golang-acexy/cloud-cache/cachecloud"
 	"github.com/golang-acexy/starter-parent/parent"
 	"github.com/golang-acexy/starter-redis/redisstarter"
 	"github.com/redis/go-redis/v9"
-	"testing"
-	"time"
 )
 
 var cluster = &redisstarter.RedisStarter{

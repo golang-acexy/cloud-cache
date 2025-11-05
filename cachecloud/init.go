@@ -1,8 +1,9 @@
 package cachecloud
 
 import (
-	"github.com/acexy/golang-toolkit/util/coll"
 	"sync"
+
+	"github.com/acexy/golang-toolkit/util/coll"
 )
 
 // 设置全局服务名

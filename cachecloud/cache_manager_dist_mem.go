@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"strings"
+	"sync"
+
 	"github.com/acexy/golang-toolkit/caching"
 	"github.com/acexy/golang-toolkit/crypto/hashing"
 	"github.com/acexy/golang-toolkit/logger"
 	"github.com/acexy/golang-toolkit/util/gob"
 	"github.com/golang-acexy/starter-redis/redisstarter"
 	"github.com/redis/go-redis/v9"
-	"strings"
-	"sync"
 )
 
 // 分布式内存缓存：内存缓存的同步只使用失效过期同步(及某个实例触发失效时，向其它实例同步实现信息清除该缓存)，并不保持持续同步。

@@ -2,8 +2,9 @@ package cachecloud
 
 import (
 	"errors"
-	"github.com/acexy/golang-toolkit/logger"
 	"time"
+
+	"github.com/acexy/golang-toolkit/logger"
 )
 
 // NewMemCacheConfig 创建一个内存缓存配置

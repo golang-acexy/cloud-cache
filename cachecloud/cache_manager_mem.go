@@ -2,8 +2,9 @@ package cachecloud
 
 import (
 	"errors"
-	"github.com/acexy/golang-toolkit/caching"
 	"sync"
+
+	"github.com/acexy/golang-toolkit/caching"
 )
 
 var memCache *memCacheManager

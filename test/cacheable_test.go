@@ -2,12 +2,13 @@ package test
 
 import (
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/acexy/golang-toolkit/logger"
 	"github.com/acexy/golang-toolkit/math/random"
 	"github.com/acexy/golang-toolkit/sys"
 	"github.com/golang-acexy/cloud-cache/cachecloud"
-	"testing"
-	"time"
 )
 
 func TestCacheable(t *testing.T) {
