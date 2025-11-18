@@ -48,7 +48,7 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 				if sum == "" {
 					err := bucket.Evict(key)
 					if err == nil {
-						logger.Logrus().Traceln("分布式内存缓存值已删除", bucketName, cacheKey)
+						logger.Logrus().Traceln("dist mem cache deleted", bucketName, cacheKey)
 					}
 					return
 				}
@@ -57,7 +57,7 @@ func initDistMemCacheManager(configs ...CacheConfig) {
 					md5Bytes := hashing.Md5Bytes(bytes)
 					currentSum := hex.EncodeToString(md5Bytes[:])
 					if sum != currentSum {
-						logger.Logrus().Traceln("分布式内存缓存值已变化", bucketName, cacheKey)
+						logger.Logrus().Traceln("dist mem cache changed", bucketName, cacheKey)
 						_ = bucket.Evict(key)
 					}
 				}
@@ -96,13 +96,13 @@ type distMemeCacheBucket struct {
 func (m *distMemeCacheBucket) publicEvent(bucketName, rawCacheKey, dataSum string) {
 	err := distMemTopicCmd.Publish(redisstarter.NewRedisKey(distMemTopicName), getNodeId()+topicDelimiter+bucketName+topicDelimiter+rawCacheKey+topicDelimiter+dataSum)
 	if err != nil {
-		logger.Logrus().Errorln("发布分布式内存缓存变化事件失败", rawCacheKey, err)
+		logger.Logrus().Warningln("event publish failed", rawCacheKey, err)
 	}
 }
 func (m *distMemeCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
 	err := m.bucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
 	if errors.Is(err, caching.CacheMiss) {
-		err = CacheMiss
+		err = ErrCacheMiss
 	}
 	return err
 }

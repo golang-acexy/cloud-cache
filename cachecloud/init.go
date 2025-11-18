@@ -1,22 +1,27 @@
 package cachecloud
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/acexy/golang-toolkit/util/coll"
+	"github.com/acexy/golang-toolkit/util/str"
 )
 
 // 设置全局服务名
 var serviceNamePrefix string
-var once sync.Once
+var initOnce sync.Once
 
 var use2LCache bool
 var useDistMemCache bool
 var useMemCache bool
 var useRedisCache bool
 
-func Init(option Option, cacheConfigs ...CacheConfig) {
-	once.Do(func() {
+func Init(option Option, cacheConfigs ...CacheConfig) error {
+	if !str.HasText(option.ServiceName) {
+		return errors.New("service name can not be empty")
+	}
+	initOnce.Do(func() {
 		serviceNamePrefix = option.ServiceName
 		if len(cacheConfigs) > 0 {
 			// 加载分布式内存缓存设置
@@ -53,4 +58,5 @@ func Init(option Option, cacheConfigs ...CacheConfig) {
 			}
 		}
 	})
+	return nil
 }

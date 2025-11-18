@@ -93,7 +93,7 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, suppl
 		return errors.New("bucket not found")
 	}
 	err := bucket.Get(cacheKey, result, keyAppend...)
-	if errors.Is(err, CacheMiss) {
+	if errors.Is(err, ErrCacheMiss) {
 		if supplier != nil {
 			value, flag := supplier()
 			if flag {

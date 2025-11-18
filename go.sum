@@ -1,5 +1,7 @@
 github.com/acexy/golang-toolkit v0.0.55 h1:CZKhaBh1fqoqMKJjYqac+zv714tTmpyyiexaZTr0zKY=
 github.com/acexy/golang-toolkit v0.0.55/go.mod h1:RhxILrytx3SUwgzzcnahBInn9YY8TmW9kfGb0o7bh7c=
+github.com/acexy/golang-toolkit v0.0.56 h1:D2BEC8pKaHlBOGYum+HyRSKkYf1hJCkJ+Q0WybmJwlo=
+github.com/acexy/golang-toolkit v0.0.56/go.mod h1:l0Gm1q9jM1B4isoYffUsHez4MiG9FJyyM4anTj0mCnQ=
 github.com/allegro/bigcache/v3 v3.1.0 h1:H2Vp8VOvxcrB91o86fUSVJFqeuz8kpyyB02eH3bSzwk=
 github.com/allegro/bigcache/v3 v3.1.0/go.mod h1:aPyh7jEvrog9zAwx5N7+JUQX5dZTSGpxF1LAR4dr35I=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
