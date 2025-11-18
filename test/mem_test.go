@@ -2,10 +2,11 @@ package test
 
 import (
 	"fmt"
-	"github.com/acexy/golang-toolkit/util/json"
-	"github.com/golang-acexy/cloud-cache/cachecloud"
 	"testing"
 	"time"
+
+	"github.com/acexy/golang-toolkit/util/json"
+	"github.com/golang-acexy/cloud-cache/cachecloud"
 )
 
 type Model struct {

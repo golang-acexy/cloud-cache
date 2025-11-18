@@ -2,8 +2,9 @@ package cachecloud
 
 import (
 	"errors"
-	"github.com/acexy/golang-toolkit/logger"
 	"time"
+
+	"github.com/acexy/golang-toolkit/logger"
 )
 
 // NewMemCacheConfig 创建一个内存缓存配置
@@ -92,7 +93,7 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, suppl
 		return errors.New("bucket not found")
 	}
 	err := bucket.Get(cacheKey, result, keyAppend...)
-	if errors.Is(err, CacheMiss) {
+	if errors.Is(err, ErrCacheMiss) {
 		if supplier != nil {
 			value, flag := supplier()
 			if flag {

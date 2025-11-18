@@ -2,8 +2,9 @@ package cachecloud
 
 import (
 	"errors"
-	"github.com/acexy/golang-toolkit/caching"
 	"sync"
+
+	"github.com/acexy/golang-toolkit/caching"
 )
 
 var memCache *memCacheManager
@@ -52,7 +53,7 @@ type memeCacheBucket struct {
 func (m *memeCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
 	err := m.bucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
 	if errors.Is(err, caching.CacheMiss) {
-		err = CacheMiss
+		err = ErrCacheMiss
 	}
 	return err
 }

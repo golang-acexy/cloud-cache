@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"strings"
+	"sync"
+
 	"github.com/acexy/golang-toolkit/caching"
 	"github.com/acexy/golang-toolkit/crypto/hashing"
 	"github.com/acexy/golang-toolkit/logger"
@@ -11,8 +14,6 @@ import (
 	"github.com/acexy/golang-toolkit/util/gob"
 	"github.com/golang-acexy/starter-redis/redisstarter"
 	"github.com/redis/go-redis/v9"
-	"strings"
-	"sync"
 )
 
 // 二级缓存：内存缓存作为一级 redis缓存为二级，如果内存缓存中没有发现会查看redis，如果redis存在会重建内存缓存
@@ -52,7 +53,7 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 				if sum == "" {
 					err := bucket.Evict(key)
 					if err == nil {
-						logger.Logrus().Traceln("二级缓存内存缓存值已删除", bucketName, cacheKey)
+						logger.Logrus().Traceln("l2 cache deleted", bucketName, cacheKey)
 					}
 					return
 				}
@@ -61,7 +62,7 @@ func initSecondLevelCacheManager(configs ...CacheConfig) {
 					md5Bytes := hashing.Md5Bytes(bytes)
 					currentSum := hex.EncodeToString(md5Bytes[:])
 					if sum != currentSum {
-						logger.Logrus().Traceln("二级缓存内存缓存值已变化", bucketName, cacheKey)
+						logger.Logrus().Traceln("l2 cache changed", bucketName, cacheKey)
 						_ = bucket.Evict(key)
 					}
 				}
@@ -115,18 +116,18 @@ type secondLevelCacheBucket struct {
 func (m *secondLevelCacheBucket) publicEvent(bucketName, rawCacheKey, dataSum string) {
 	err := level2TopicCmd.Publish(redisstarter.NewRedisKey(level2TopicName), getNodeId()+topicDelimiter+bucketName+topicDelimiter+rawCacheKey+topicDelimiter+dataSum)
 	if err != nil {
-		logger.Logrus().Errorln("发布二级内存缓存变化事件失败", rawCacheKey, err)
+		logger.Logrus().Warningln("event publish failed", rawCacheKey, err)
 	}
 }
 func (m *secondLevelCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
 	err := m.memBucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
 	if errors.Is(err, caching.CacheMiss) {
-		logger.Logrus().Traceln("内存缓存中未命中", key.RawKeyString(keyAppend...), "向redis中请求")
+		logger.Logrus().Traceln("mem cache missed", key.RawKeyString(keyAppend...), "check redis")
 		err = m.redisBucket.Get(key, result, keyAppend...)
-		if errors.Is(err, CacheMiss) {
-			logger.Logrus().Traceln("redis中未命", key.RawKeyString(keyAppend...))
+		if errors.Is(err, ErrCacheMiss) {
+			logger.Logrus().Traceln("redis cache missed", key.RawKeyString(keyAppend...))
 		} else {
-			logger.Logrus().Traceln("redis中已命中", key.RawKeyString(keyAppend...), "重建mem缓存")
+			logger.Logrus().Traceln("redis rebuild cache", key.RawKeyString(keyAppend...))
 			_ = m.memBucket.Put(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
 		}
 	}

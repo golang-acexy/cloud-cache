@@ -2,10 +2,11 @@ package cachecloud
 
 import (
 	"errors"
+	"time"
+
 	"github.com/acexy/golang-toolkit/util/coll"
 	"github.com/golang-acexy/starter-redis/redisstarter"
 	"github.com/redis/go-redis/v9"
-	"time"
 )
 
 var redisCache *redisCacheManager
@@ -47,7 +48,7 @@ type redisCacheBucket struct {
 func (m *redisCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
 	err := redisstarter.StringCmd().GetAnyWithGob(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expire), result, keyAppend...)
 	if errors.Is(err, redis.Nil) {
-		err = CacheMiss
+		err = ErrCacheMiss
 	}
 	return err
 }
@@ -61,5 +62,5 @@ func (m *redisCacheBucket) Evict(key CacheKey, keyAppend ...interface{}) error {
 	if result > 0 {
 		return nil
 	}
-	return errors.New("no effect")
+	return ErrCacheMiss
 }

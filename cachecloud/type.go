@@ -15,7 +15,7 @@ const (
 	topicDelimiter = "<@.>"
 )
 
-var CacheMiss = errors.New("cache miss")
+var ErrCacheMiss = errors.New("cache miss")
 
 type Option struct {
 	ServiceName string // 服务名称 可用于防止隔离不同服务使用相同redis出现的key冲突
@@ -56,7 +56,7 @@ func (c CacheKey) RawKeyString(keyAppend ...interface{}) string {
 
 type CacheBucket interface {
 	// Get 获取指定key对应的值
-	// result 值类型指针 缓存未命中时返回标准错误 CacheMiss
+	// result 值类型指针 缓存未命中时返回标准错误 ErrCacheMiss
 	Get(key CacheKey, result any, keyAppend ...interface{}) error
 
 	// Put 设置key对应值
