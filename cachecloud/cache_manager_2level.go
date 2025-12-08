@@ -121,7 +121,7 @@ func (m *secondLevelCacheBucket) publicEvent(bucketName, rawCacheKey, dataSum st
 }
 func (m *secondLevelCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
 	err := m.memBucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
-	if errors.Is(err, caching.CacheMiss) {
+	if errors.Is(err, caching.ErrCacheMiss) {
 		logger.Logrus().Traceln("mem cache missed", key.RawKeyString(keyAppend...), "check redis")
 		err = m.redisBucket.Get(key, result, keyAppend...)
 		if errors.Is(err, ErrCacheMiss) {

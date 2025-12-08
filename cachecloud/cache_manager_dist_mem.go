@@ -101,7 +101,7 @@ func (m *distMemeCacheBucket) publicEvent(bucketName, rawCacheKey, dataSum strin
 }
 func (m *distMemeCacheBucket) Get(key CacheKey, result any, keyAppend ...interface{}) error {
 	err := m.bucket.Get(caching.NewNemCacheKey(key.KeyFormat), result, keyAppend...)
-	if errors.Is(err, caching.CacheMiss) {
+	if errors.Is(err, caching.ErrCacheMiss) {
 		err = ErrCacheMiss
 	}
 	return err
