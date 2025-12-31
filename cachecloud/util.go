@@ -2,7 +2,6 @@ package cachecloud
 
 import (
 	"sync"
-	"time"
 
 	"github.com/acexy/golang-toolkit/crypto/hashing"
 	"github.com/acexy/golang-toolkit/math/conversion"
@@ -15,7 +14,7 @@ var nodeOnce sync.Once
 
 func getNodeId() string {
 	nodeOnce.Do(func() {
-		nodeId = hashing.Md5Hex(random.UUID() + conversion.FromInt64(date.UnixTimestamp(time.Now())))
+		nodeId = hashing.Md5Hex(random.UUID() + conversion.FromInt64(date.CurrentUnixMilli()))
 	})
 	return nodeId
 }

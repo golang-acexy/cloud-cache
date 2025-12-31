@@ -3,7 +3,7 @@ module github.com/golang-acexy/cloud-cache
 go 1.24.6
 
 require (
-	github.com/acexy/golang-toolkit v0.0.59
+	github.com/acexy/golang-toolkit v0.0.60
 	github.com/golang-acexy/starter-parent v0.1.21
 	github.com/golang-acexy/starter-redis v0.1.15
 	github.com/redis/go-redis/v9 v9.17.2
@@ -21,6 +21,6 @@ require (
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
