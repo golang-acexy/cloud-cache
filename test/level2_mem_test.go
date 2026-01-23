@@ -48,7 +48,7 @@ func TestLevel21(t *testing.T) {
 				// 获取1秒缓存数据
 				var value Model
 				_ = cachecloud.GetCacheValue(level2Bucket, cacheKeyTest, &value, 1)
-				fmt.Println(json.ToJson(value))
+				fmt.Println(json.ToString(value))
 				time.Sleep(time.Second)
 			}
 		}
@@ -85,7 +85,7 @@ func TestLevel22(t *testing.T) {
 				// 获取1秒缓存数据
 				var value Model
 				_ = cachecloud.GetCacheValue(level2Bucket, cacheKeyTest, &value, 1)
-				fmt.Println(json.ToJson(value))
+				fmt.Println(json.ToString(value))
 				time.Sleep(time.Second)
 			}
 		}
