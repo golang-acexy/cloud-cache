@@ -40,7 +40,7 @@ func TestDistMem1(t *testing.T) {
 				// 获取1秒缓存数据
 				var value Model
 				_ = cachecloud.GetCacheValue(oneHourBucket, cacheKeyTest, &value)
-				fmt.Println(json.ToJson(value))
+				fmt.Println(json.ToString(value))
 				time.Sleep(time.Second)
 			}
 		}
@@ -80,7 +80,7 @@ func TestDistMem2(t *testing.T) {
 				// 获取1秒缓存数据
 				var value Model
 				_ = cachecloud.GetCacheValue(oneHourBucket, cacheKeyTest, &value)
-				fmt.Println(json.ToJson(value))
+				fmt.Println(json.ToString(value))
 				time.Sleep(time.Second)
 			}
 		}
