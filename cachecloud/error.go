@@ -14,6 +14,5 @@ var (
 	ErrAlreadyInitialized     = errors.New("cache cloud already initialized")
 	ErrNotInitialized         = errors.New("cache cloud not initialized")
 	ErrResultRequired         = errors.New("cache result is required")
-	ErrSupplierReturnedNil    = errors.New("cache supplier returned nil")
 	ErrInvalidSyncEvent       = errors.New("invalid cache sync event")
 )

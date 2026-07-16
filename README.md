@@ -188,7 +188,7 @@ Applications should normally prefer the package-level `Get`, `Put`, and `Evict` 
 
 ## Cacheable
 
-`Cacheable` reads the cache first and invokes a Supplier only after `ErrCacheMiss`:
+`Cacheable` reads the cache first and invokes a Loader only after `ErrCacheMiss`:
 
 ```go
 var user User
@@ -196,8 +196,15 @@ err := cachecloud.Cacheable(
 	ProfileBucket,
 	cachecloud.NewCacheKey("user:%d"),
 	&user,
-	func() (*User, error) {
-		return userRepository.SelectByID(userID)
+	func(result *User) error {
+		rows, err := userRepository.QueryByID(userID, result)
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return ErrUserNotFound
+		}
+		return nil
 	},
 	userID,
 )
@@ -206,18 +213,18 @@ if err != nil {
 }
 ```
 
-The Supplier type is:
+The Loader type is:
 
 ```go
-type Supplier[T any] func() (T, error)
+type Loader[T any] func(result *T) error
 ```
 
 Behavior:
 
-- A cache hit returns the cached value without invoking the Supplier.
-- A cache miss invokes the Supplier and stores the returned value.
-- A Supplier error is returned unchanged.
-- A nil Supplier result returns `ErrSupplierReturnedNil`.
+- A cache hit fills the result without invoking the Loader.
+- A cache miss invokes the Loader with the same result pointer and stores that result.
+- A Loader error is returned unchanged and the result is not cached.
+- A nil Loader returns `ErrCacheMiss` when the cache does not contain the key.
 - A nil result pointer returns `ErrResultRequired`.
 
 ## Distributed Memory Synchronization
@@ -289,7 +296,6 @@ if errors.Is(err, cachecloud.ErrCacheMiss) {
 | `ErrAlreadyInitialized` | The process-wide cache runtime was already initialized. |
 | `ErrNotInitialized` | A cache operation was used before `Init`. |
 | `ErrResultRequired` | A nil result pointer was passed to `Get` or `Cacheable`. |
-| `ErrSupplierReturnedNil` | A successful Supplier returned a nil value. |
 | `ErrInvalidSyncEvent` | A distributed invalidation message is malformed. |
 
 ## Design Notes

@@ -26,8 +26,8 @@ type BucketName caching.BucketName
 // BucketType 存储桶类型
 type BucketType string
 
-// Supplier 在缓存未命中时提供待缓存的数据。
-type Supplier[T any] func() (T, error)
+// Loader 在缓存未命中时将实际数据加载到 result。
+type Loader[T any] func(result *T) error
 
 // BucketConfig 定义缓存桶类型和过期时间。
 type BucketConfig struct {

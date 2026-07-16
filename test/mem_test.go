@@ -60,29 +60,29 @@ func TestMemoryCacheAndCacheable(t *testing.T) {
 		t.Fatalf("expected cache miss after eviction, got %v", err)
 	}
 
-	supplierCalls := 0
+	loaderCalls := 0
 	var rebuilt Model
-	err := cachecloud.Cacheable(bucketName, key, &rebuilt, func() (*Model, error) {
-		supplierCalls++
-		value := Model{Name: "rebuilt", Age: 20}
-		return &value, nil
+	err := cachecloud.Cacheable(bucketName, key, &rebuilt, func(result *Model) error {
+		loaderCalls++
+		*result = Model{Name: "rebuilt", Age: 20}
+		return nil
 	}, 3)
 	if err != nil {
 		t.Fatalf("rebuild cache: %v", err)
 	}
-	if rebuilt.Name != "rebuilt" || supplierCalls != 1 {
-		t.Fatalf("unexpected rebuilt value or supplier count: value=%+v calls=%d", rebuilt, supplierCalls)
+	if rebuilt.Name != "rebuilt" || loaderCalls != 1 {
+		t.Fatalf("unexpected rebuilt value or loader count: value=%+v calls=%d", rebuilt, loaderCalls)
 	}
 
 	var cached Model
-	err = cachecloud.Cacheable(bucketName, key, &cached, func() (*Model, error) {
-		supplierCalls++
-		return nil, errors.New("supplier must not be called on hit")
+	err = cachecloud.Cacheable(bucketName, key, &cached, func(result *Model) error {
+		loaderCalls++
+		return errors.New("loader must not be called on hit")
 	}, 3)
 	if err != nil {
 		t.Fatalf("read cacheable hit: %v", err)
 	}
-	if cached != rebuilt || supplierCalls != 1 {
-		t.Fatalf("cacheable hit did not reuse cache: value=%+v calls=%d", cached, supplierCalls)
+	if cached != rebuilt || loaderCalls != 1 {
+		t.Fatalf("cacheable hit did not reuse cache: value=%+v calls=%d", cached, loaderCalls)
 	}
 }
