@@ -81,12 +81,25 @@ func TestCacheableErrorBranches(t *testing.T) {
 
 	var result string
 	loaderErr := errors.New("loader failed")
-	if err := Cacheable(bucketName, key, &result, func(result *string) error {
-		return loaderErr
+	if err := Cacheable(bucketName, key, &result, func(result *string) (bool, error) {
+		return false, loaderErr
 	}, 1); !errors.Is(err, loaderErr) {
 		t.Fatalf("expected loader error, got %v", err)
 	}
 	if err := Cacheable[string](bucketName, key, &result, nil, 1); !errors.Is(err, ErrCacheMiss) {
 		t.Fatalf("expected cache miss without loader, got %v", err)
+	}
+
+	if err := Cacheable(bucketName, key, &result, func(result *string) (bool, error) {
+		*result = "not cached"
+		return false, nil
+	}, 2); err != nil {
+		t.Fatalf("load without caching: %v", err)
+	}
+	if result != "not cached" {
+		t.Fatalf("unexpected loaded result: %q", result)
+	}
+	if err := Get(bucketName, key, &result, 2); !errors.Is(err, ErrCacheMiss) {
+		t.Fatalf("expected skipped cache result to miss, got %v", err)
 	}
 }

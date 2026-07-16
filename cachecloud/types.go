@@ -26,8 +26,9 @@ type BucketName caching.BucketName
 // BucketType 存储桶类型
 type BucketType string
 
-// Loader 在缓存未命中时将实际数据加载到 result。
-type Loader[T any] func(result *T) error
+// Loader 在缓存未命中将实际数据加载到 result。
+// 返回值 cacheable 表示是否需要将加载结果写入缓存。
+type Loader[T any] func(result *T) (cacheable bool, err error)
 
 // BucketConfig 定义缓存桶类型和过期时间。
 type BucketConfig struct {

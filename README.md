@@ -196,15 +196,15 @@ err := cachecloud.Cacheable(
 	ProfileBucket,
 	cachecloud.NewCacheKey("user:%d"),
 	&user,
-	func(result *User) error {
+	func(result *User) (bool, error) {
 		rows, err := userRepository.QueryByID(userID, result)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if rows == 0 {
-			return ErrUserNotFound
+			return false, ErrUserNotFound
 		}
-		return nil
+		return true, nil
 	},
 	userID,
 )
@@ -216,13 +216,14 @@ if err != nil {
 The Loader type is:
 
 ```go
-type Loader[T any] func(result *T) error
+type Loader[T any] func(result *T) (cacheable bool, err error)
 ```
 
 Behavior:
 
 - A cache hit fills the result without invoking the Loader.
-- A cache miss invokes the Loader with the same result pointer and stores that result.
+- A cache miss invokes the Loader with the same result pointer.
+- A Loader result of `true, nil` stores the loaded result; `false, nil` returns it without caching.
 - A Loader error is returned unchanged and the result is not cached.
 - A nil Loader returns `ErrCacheMiss` when the cache does not contain the key.
 - A nil result pointer returns `ErrResultRequired`.

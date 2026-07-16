@@ -89,7 +89,8 @@ func Evict(bucketName BucketName, cacheKey CacheKey, keyAppend ...any) error {
 	return bucket.Evict(cacheKey, keyAppend...)
 }
 
-// Cacheable 通过指定的存储桶和缓存 key 获取缓存值，缓存未命中时调用 loader 填充结果并写入缓存。
+// Cacheable 通过指定的存储桶和缓存 key 获取缓存值。
+// 缓存未命中时调用 loader 填充结果，并根据 loader 的返回值决定是否写入缓存。
 func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, loader Loader[T], keyAppend ...any) error {
 	if result == nil {
 		return ErrResultRequired
@@ -103,10 +104,17 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, loade
 		if loader == nil {
 			return err
 		}
-		if err = loader(result); err != nil {
+		cacheable, loadErr := loader(result)
+		if loadErr != nil {
+			return loadErr
+		}
+		if !cacheable {
+			return nil
+		}
+		if err = bucket.Put(cacheKey, result, keyAppend...); err != nil {
 			return err
 		}
-		return bucket.Put(cacheKey, result, keyAppend...)
+		return nil
 	}
 	return err
 }

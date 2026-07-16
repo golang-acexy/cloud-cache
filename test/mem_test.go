@@ -62,10 +62,10 @@ func TestMemoryCacheAndCacheable(t *testing.T) {
 
 	loaderCalls := 0
 	var rebuilt Model
-	err := cachecloud.Cacheable(bucketName, key, &rebuilt, func(result *Model) error {
+	err := cachecloud.Cacheable(bucketName, key, &rebuilt, func(result *Model) (bool, error) {
 		loaderCalls++
 		*result = Model{Name: "rebuilt", Age: 20}
-		return nil
+		return true, nil
 	}, 3)
 	if err != nil {
 		t.Fatalf("rebuild cache: %v", err)
@@ -75,9 +75,9 @@ func TestMemoryCacheAndCacheable(t *testing.T) {
 	}
 
 	var cached Model
-	err = cachecloud.Cacheable(bucketName, key, &cached, func(result *Model) error {
+	err = cachecloud.Cacheable(bucketName, key, &cached, func(result *Model) (bool, error) {
 		loaderCalls++
-		return errors.New("loader must not be called on hit")
+		return false, errors.New("loader must not be called on hit")
 	}, 3)
 	if err != nil {
 		t.Fatalf("read cacheable hit: %v", err)
