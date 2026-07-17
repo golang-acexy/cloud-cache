@@ -2,9 +2,15 @@
 
 `cloud-cache` provides one cache API for the golang-acexy cloud ecosystem. It combines the in-memory cache implementation from `golang-toolkit/caching` with `starter-redis` and supports local memory, synchronized distributed memory, Redis, and two-level cache buckets.
 
+## Ecosystem Role
+
+This package owns cache policy rather than Redis lifecycle. It standardizes application cache access and cache-aside loading while delegating Redis connectivity, Pub/Sub, and shutdown to `starter-redis`.
+
 ## Requirements
 
 Current module Go version: `1.25.8`.
+
+## Installation
 
 ```bash
 go get github.com/golang-acexy/cloud-cache
