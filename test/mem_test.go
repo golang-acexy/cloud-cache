@@ -1,11 +1,10 @@
 package test
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/acexy/golang-toolkit/util/json"
 	"github.com/golang-acexy/cloud-cache/cachecloud"
 )
 
@@ -15,62 +14,75 @@ type Model struct {
 	Age  int
 }
 
-func TestMem(t *testing.T) {
-	oneSecBucket := cachecloud.BucketName("1s")
-	oneHourBucket := cachecloud.BucketName("1h")
-
-	cachecloud.Init(
-		cachecloud.Option{}, cachecloud.NewMemCacheConfig(oneSecBucket, time.Second),
-		cachecloud.NewMemCacheConfig(oneHourBucket, time.Hour),
-	)
-
-	cacheKeyTest := cachecloud.CacheKey{KeyFormat: "test"}
-	_ = cachecloud.PutCacheValue(oneSecBucket, cacheKeyTest, Model{
-		Name: "acexy",
-		Sex:  1,
-		Age:  18,
-	})
-	_ = cachecloud.PutCacheValue(oneHourBucket, cacheKeyTest, Model{
-		Name: "acexy1",
-		Sex:  11,
-		Age:  181,
-	})
-
-	// 获取1秒缓存数据
-	var value *Model
-	_ = cachecloud.GetCacheValue(oneSecBucket, cacheKeyTest, &value)
-	fmt.Println(json.ToString(value))
-	_ = cachecloud.GetCacheValue(oneHourBucket, cacheKeyTest, &value)
-	fmt.Println(json.ToString(value))
-
-	// 等待1秒缓存过期后再次获取
-	var value1 *Model
-	time.Sleep(time.Second * 3)
-	fmt.Println("等待3秒后继续获取")
-	_ = cachecloud.GetCacheValue(oneSecBucket, cacheKeyTest, &value1)
-	fmt.Println(json.ToString(value1))
-	_ = cachecloud.GetCacheValue(oneHourBucket, cacheKeyTest, &value1)
-	fmt.Println(json.ToString(value1))
-
-	// 清除缓存
-	fmt.Println("清除缓存后获取")
-	_ = cachecloud.EvictCache(oneHourBucket, cacheKeyTest)
-	var value2 *Model
-	_ = cachecloud.GetCacheValue(oneHourBucket, cacheKeyTest, &value2)
-	fmt.Println(json.ToString(value2))
-}
-
-func TestBugFix(t *testing.T) {
-	const (
-		BucketL225Day cachecloud.BucketName = "l2-25-day" // 二级缓存规则： 25天过期
-		BucketMem1Day cachecloud.BucketName = "mem-1-day" // 内存缓存规则： 1天过期
-	)
-
-	bucket := []cachecloud.CacheConfig{
-		cachecloud.NewLevel2CacheConfig(BucketL225Day, time.Hour*24*5, time.Hour*24*25),
-		cachecloud.NewMemCacheConfig(BucketMem1Day, time.Hour*24),
+func TestMemoryCacheAndCacheable(t *testing.T) {
+	bucketName := cachecloud.BucketName("memory")
+	if err := cachecloud.Init(
+		cachecloud.Options{ServiceName: "memory-test"},
+		cachecloud.NewMemBucketConfig(bucketName, time.Minute),
+	); err != nil {
+		t.Fatalf("init memory cache: %v", err)
 	}
-	cachecloud.Init(cachecloud.Option{}, bucket...)
 
-	cachecloud.GetBucket(BucketMem1Day)
+	key := cachecloud.NewCacheKey("model:%d")
+	if cachecloud.GetBucket(bucketName) == nil {
+		t.Fatal("expected configured memory bucket")
+	}
+	if cachecloud.GetBucketByType(bucketName, cachecloud.BucketTypeMem) == nil {
+		t.Fatal("expected memory bucket by type")
+	}
+	if cachecloud.GetBucketByType(bucketName, cachecloud.BucketTypeRedis) != nil {
+		t.Fatal("memory bucket must not resolve as Redis bucket")
+	}
+	if err := cachecloud.Get("unknown", key, new(Model)); !errors.Is(err, cachecloud.ErrBucketNotFound) {
+		t.Fatalf("expected unknown bucket error, got %v", err)
+	}
+	var nilResult *Model
+	if err := cachecloud.Get(bucketName, key, nilResult, 1); !errors.Is(err, cachecloud.ErrResultRequired) {
+		t.Fatalf("expected result required error, got %v", err)
+	}
+
+	want := Model{Name: "acexy", Sex: 1, Age: 18}
+	if err := cachecloud.Put(bucketName, key, want, 1); err != nil {
+		t.Fatalf("put memory cache: %v", err)
+	}
+	var got Model
+	if err := cachecloud.Get(bucketName, key, &got, 1); err != nil {
+		t.Fatalf("get memory cache: %v", err)
+	}
+	if got != want {
+		t.Fatalf("unexpected memory value: got %+v, want %+v", got, want)
+	}
+
+	if err := cachecloud.Evict(bucketName, key, 1); err != nil {
+		t.Fatalf("evict memory cache: %v", err)
+	}
+	if err := cachecloud.Get(bucketName, key, &got, 1); !errors.Is(err, cachecloud.ErrCacheMiss) {
+		t.Fatalf("expected cache miss after eviction, got %v", err)
+	}
+
+	loaderCalls := 0
+	var rebuilt Model
+	err := cachecloud.Cacheable(bucketName, key, &rebuilt, func(result *Model) (bool, error) {
+		loaderCalls++
+		*result = Model{Name: "rebuilt", Age: 20}
+		return true, nil
+	}, 3)
+	if err != nil {
+		t.Fatalf("rebuild cache: %v", err)
+	}
+	if rebuilt.Name != "rebuilt" || loaderCalls != 1 {
+		t.Fatalf("unexpected rebuilt value or loader count: value=%+v calls=%d", rebuilt, loaderCalls)
+	}
+
+	var cached Model
+	err = cachecloud.Cacheable(bucketName, key, &cached, func(result *Model) (bool, error) {
+		loaderCalls++
+		return false, errors.New("loader must not be called on hit")
+	}, 3)
+	if err != nil {
+		t.Fatalf("read cacheable hit: %v", err)
+	}
+	if cached != rebuilt || loaderCalls != 1 {
+		t.Fatalf("cacheable hit did not reuse cache: value=%+v calls=%d", cached, loaderCalls)
+	}
 }

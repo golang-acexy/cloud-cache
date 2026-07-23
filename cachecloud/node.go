@@ -9,12 +9,12 @@ import (
 	"github.com/acexy/golang-toolkit/util/date"
 )
 
-var nodeId string
+var nodeID string
 var nodeOnce sync.Once
 
-func getNodeId() string {
+func getNodeID() string {
 	nodeOnce.Do(func() {
-		nodeId = hashing.Md5Hex(random.UUID() + conversion.FromInt64(date.CurrentUnixMilli()))
+		nodeID = hashing.Md5Hex(random.UUID() + conversion.FromInt64(date.CurrentUnixMilli()))
 	})
-	return nodeId
+	return nodeID
 }
