@@ -209,7 +209,9 @@ func (m *level2CacheBucket) applySyncEvent(event cacheSyncEvent) {
 
 	key := caching.NewCacheKey(event.CacheKey)
 	if event.Operation == cacheSyncDelete {
-		_ = m.memoryManager.Evict(m.memoryBucketName, key)
+		if err := m.memoryManager.Evict(m.memoryBucketName, key); err == nil {
+			logger.Logrus().Tracef("level2 memory cache sync evicted key: bucket=%s key=%s operation=%s", m.bucketName, event.CacheKey, event.Operation)
+		}
 		return
 	}
 
@@ -218,11 +220,15 @@ func (m *level2CacheBucket) applySyncEvent(event cacheSyncEvent) {
 		return
 	}
 	if local.ValueHash != event.ValueHash {
-		_ = m.memoryManager.Evict(m.memoryBucketName, key)
+		if err := m.memoryManager.Evict(m.memoryBucketName, key); err == nil {
+			logger.Logrus().Tracef("level2 memory cache sync evicted key: bucket=%s key=%s operation=%s reason=hash-mismatch", m.bucketName, event.CacheKey, event.Operation)
+		}
 		return
 	}
 
 	if local.extendExpiration(event.ExpireAt, m.memoryExpiration, time.Now()) {
-		_ = m.memoryManager.Put(m.memoryBucketName, key, local)
+		if err := m.memoryManager.Put(m.memoryBucketName, key, local); err == nil {
+			logger.Logrus().Tracef("level2 memory cache sync extended expiration: bucket=%s key=%s expireAt=%d", m.bucketName, event.CacheKey, local.ExpireAt)
+		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/acexy/golang-toolkit/caching"
 	toolkitError "github.com/acexy/golang-toolkit/error"
+	"github.com/acexy/golang-toolkit/logger"
 	"github.com/golang-acexy/starter-redis/redisstarter"
 	"github.com/redis/go-redis/v9"
 )
@@ -148,7 +149,9 @@ func (m *distMemCacheBucket) applySyncEvent(event cacheSyncEvent) {
 
 	key := caching.NewCacheKey(event.CacheKey)
 	if event.Operation == cacheSyncDelete {
-		_ = m.manager.Evict(m.managerBucketName, key)
+		if err := m.manager.Evict(m.managerBucketName, key); err == nil {
+			logger.Logrus().Tracef("distributed memory cache sync evicted key: bucket=%s key=%s operation=%s", m.bucketName, event.CacheKey, event.Operation)
+		}
 		return
 	}
 
@@ -157,12 +160,16 @@ func (m *distMemCacheBucket) applySyncEvent(event cacheSyncEvent) {
 		return
 	}
 	if local.ValueHash != event.ValueHash {
-		_ = m.manager.Evict(m.managerBucketName, key)
+		if err := m.manager.Evict(m.managerBucketName, key); err == nil {
+			logger.Logrus().Tracef("distributed memory cache sync evicted key: bucket=%s key=%s operation=%s reason=hash-mismatch", m.bucketName, event.CacheKey, event.Operation)
+		}
 		return
 	}
 
 	// 相同内容只静默续期，不再次广播，避免同步消息形成循环。
 	if local.extendExpiration(event.ExpireAt, m.expiration, time.Now()) {
-		_ = m.manager.Put(m.managerBucketName, key, local)
+		if err := m.manager.Put(m.managerBucketName, key, local); err == nil {
+			logger.Logrus().Tracef("distributed memory cache sync extended expiration: bucket=%s key=%s expireAt=%d", m.bucketName, event.CacheKey, local.ExpireAt)
+		}
 	}
 }
