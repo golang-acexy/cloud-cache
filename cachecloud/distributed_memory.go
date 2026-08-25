@@ -3,9 +3,10 @@ package cachecloud
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	"github.com/acexy/golang-toolkit/caching"
-	"github.com/acexy/golang-toolkit/crypto/hashing"
 	toolkitError "github.com/acexy/golang-toolkit/error"
 	"github.com/golang-acexy/starter-redis/redisstarter"
 	"github.com/redis/go-redis/v9"
@@ -19,6 +20,7 @@ type distMemCacheManager struct {
 	buckets   map[BucketName]*distMemCacheBucket
 	syncTopic string
 	manager   *caching.CacheManager
+	locks     [cacheSyncShardCount]sync.Mutex
 }
 
 func newDistMemCacheManager(serviceName string, configs []BucketConfig) (*distMemCacheManager, error) {
@@ -40,19 +42,36 @@ func newDistMemCacheManager(serviceName string, configs []BucketConfig) (*distMe
 			managerBucketName: managerBucketName,
 			bucketName:        string(config.bucketName),
 			syncTopic:         syncTopic,
+			expiration:        config.memoryExpiration,
 		}
 	}
-	return &distMemCacheManager{buckets: buckets, syncTopic: syncTopic, manager: manager}, nil
+	distManager := &distMemCacheManager{buckets: buckets, syncTopic: syncTopic, manager: manager}
+	for _, bucket := range buckets {
+		bucket.owner = distManager
+	}
+	return distManager, nil
 }
 
 func (m *distMemCacheManager) startSync() {
 	distMemSyncCmd.SubscribeRetry(context.Background(), redisstarter.NewRedisKey(m.syncTopic), func(message *redis.Message) {
-		handleSyncMessage(m.manager, message, "distributed memory")
+		handleSyncMessage(message, "distributed memory", m.handleSyncEvent)
 	})
+}
+
+func (m *distMemCacheManager) handleSyncEvent(event cacheSyncEvent) {
+	bucket := m.getBucket(BucketName(event.BucketName))
+	if bucket == nil {
+		return
+	}
+	bucket.applySyncEvent(event)
 }
 
 func (m *distMemCacheManager) getBucket(bucketName BucketName) *distMemCacheBucket {
 	return m.buckets[bucketName]
+}
+
+func (m *distMemCacheManager) syncLock(cacheKey string) *sync.Mutex {
+	return &m.locks[cacheSyncShardIndex(cacheKey)]
 }
 
 type distMemCacheBucket struct {
@@ -60,10 +79,12 @@ type distMemCacheBucket struct {
 	managerBucketName caching.BucketName
 	bucketName        string
 	syncTopic         string
+	expiration        time.Duration
+	owner             *distMemCacheManager
 }
 
-func (m *distMemCacheBucket) publishEvent(cacheKey, dataHash string) error {
-	payload, err := newSyncEventPayload(m.bucketName, cacheKey, dataHash)
+func (m *distMemCacheBucket) publishEvent(cacheKey string, operation cacheSyncOperation, envelope cacheValueEnvelope) error {
+	payload, err := newSyncEventPayload(m.bucketName, cacheKey, operation, envelope.ValueHash, envelope.ExpireAt)
 	if err != nil {
 		return err
 	}
@@ -71,27 +92,77 @@ func (m *distMemCacheBucket) publishEvent(cacheKey, dataHash string) error {
 }
 
 func (m *distMemCacheBucket) Get(key CacheKey, result any, keyArgs ...any) error {
-	err := m.manager.Get(m.managerBucketName, caching.NewCacheKey(key.KeyFormat), result, keyArgs...)
+	rawKey := key.RawKeyString(keyArgs...)
+	lock := m.owner.syncLock(cacheSyncLockKey(m.bucketName, rawKey))
+	lock.Lock()
+	var envelope cacheValueEnvelope
+	err := m.manager.Get(m.managerBucketName, caching.NewCacheKey(key.KeyFormat), &envelope, keyArgs...)
 	if errors.Is(err, toolkitError.ErrCacheMiss) {
+		lock.Unlock()
 		return ErrCacheMiss
 	}
-	return err
+	if err != nil {
+		lock.Unlock()
+		return err
+	}
+	if envelope.expired(time.Now()) {
+		_ = m.manager.Evict(m.managerBucketName, caching.NewCacheKey(key.KeyFormat), keyArgs...)
+		lock.Unlock()
+		return ErrCacheMiss
+	}
+	lock.Unlock()
+	return envelope.decode(result)
 }
 
 func (m *distMemCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
-	cacheKey := caching.NewCacheKey(key.KeyFormat)
-	if err := m.manager.Put(m.managerBucketName, cacheKey, data, keyArgs...); err != nil {
-		return err
-	}
-	dataBytes, err := m.manager.GetBytes(m.managerBucketName, cacheKey, keyArgs...)
+	envelope, err := newCacheValueEnvelope(data, m.expiration)
 	if err != nil {
 		return err
 	}
-	return m.publishEvent(key.RawKeyString(keyArgs...), hashing.Md5Hex(string(dataBytes)))
+	cacheKey := caching.NewCacheKey(key.KeyFormat)
+	rawKey := key.RawKeyString(keyArgs...)
+	lock := m.owner.syncLock(cacheSyncLockKey(m.bucketName, rawKey))
+	lock.Lock()
+	if err = m.manager.Put(m.managerBucketName, cacheKey, envelope, keyArgs...); err != nil {
+		lock.Unlock()
+		return err
+	}
+	lock.Unlock()
+	return m.publishEvent(rawKey, cacheSyncPut, envelope)
 }
 
 func (m *distMemCacheBucket) Evict(key CacheKey, keyArgs ...any) error {
+	rawKey := key.RawKeyString(keyArgs...)
+	lock := m.owner.syncLock(cacheSyncLockKey(m.bucketName, rawKey))
+	lock.Lock()
 	localErr := m.manager.Evict(m.managerBucketName, caching.NewCacheKey(key.KeyFormat), keyArgs...)
-	publishErr := m.publishEvent(key.RawKeyString(keyArgs...), "")
+	lock.Unlock()
+	publishErr := m.publishEvent(rawKey, cacheSyncDelete, cacheValueEnvelope{})
 	return errors.Join(localErr, publishErr)
+}
+
+func (m *distMemCacheBucket) applySyncEvent(event cacheSyncEvent) {
+	lock := m.owner.syncLock(cacheSyncLockKey(m.bucketName, event.CacheKey))
+	lock.Lock()
+	defer lock.Unlock()
+
+	key := caching.NewCacheKey(event.CacheKey)
+	if event.Operation == cacheSyncDelete {
+		_ = m.manager.Evict(m.managerBucketName, key)
+		return
+	}
+
+	var local cacheValueEnvelope
+	if err := m.manager.Get(m.managerBucketName, key, &local); err != nil {
+		return
+	}
+	if local.ValueHash != event.ValueHash {
+		_ = m.manager.Evict(m.managerBucketName, key)
+		return
+	}
+
+	// 相同内容只静默续期，不再次广播，避免同步消息形成循环。
+	if local.extendExpiration(event.ExpireAt, m.expiration, time.Now()) {
+		_ = m.manager.Put(m.managerBucketName, key, local)
+	}
 }

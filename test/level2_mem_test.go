@@ -38,6 +38,7 @@ func TestLevel2CacheSync(t *testing.T) {
 		wantResult string
 	}{
 		{name: "same value keeps level1 cache", action: "same", wantResult: "primary=hit:value-a;secondary=hit:value-a;other=hit:value-a"},
+		{name: "same value refreshes remote level1 expiration", action: "same-refresh", wantResult: "primary=hit:value-a;secondary=hit:value-a;other=hit:value-a"},
 		{name: "different value rebuilds from Redis", action: "different-rebuild", wantResult: "primary=hit:value-b;secondary=hit:value-a;other=hit:value-a"},
 		{name: "different value evicts level1 cache", action: "different", wantResult: "primary=miss;secondary=hit:value-a;other=hit:value-a"},
 		{name: "delete always evicts level1 cache", action: "delete", wantResult: "primary=miss;secondary=hit:value-a;other=hit:value-a"},
@@ -45,6 +46,7 @@ func TestLevel2CacheSync(t *testing.T) {
 		{name: "bucket remains isolated", action: "different-bucket", wantResult: "primary=hit:value-a;secondary=hit:value-a;other=miss"},
 		{name: "service remains isolated", action: "different-service", wantResult: "primary=hit:value-a;secondary=hit:value-a;other=hit:value-a"},
 		{name: "rapid updates evict stale level1 value", action: "rapid-update", wantResult: "primary=miss;secondary=hit:value-a;other=hit:value-a"},
+		{name: "concurrent rebuild converges to latest Redis value", action: "concurrent-rebuild", wantResult: "primary=hit:value-final;secondary=hit:value-a;other=hit:value-a"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -63,6 +65,10 @@ func runLevel2SyncScenario(t *testing.T, action, wantResult string) {
 
 	holders := make([]*exec.Cmd, 0, 2)
 	holderOutputs := make([]strings.Builder, 2)
+	holderAction := action
+	if action == "different-service" {
+		holderAction = ""
+	}
 	for i := range 2 {
 		nodeName := fmt.Sprintf("holder-%d", i+1)
 		holder := exec.Command(binary, "-test.run=^TestLevel2CacheSync$")
@@ -70,6 +76,7 @@ func runLevel2SyncScenario(t *testing.T, action, wantResult string) {
 			level2ChildEnv+"=1",
 			level2RoleEnv+"=holder",
 			level2NodeEnv+"="+nodeName,
+			level2ActionEnv+"="+holderAction,
 			level2WorkDirEnv+"="+workDir,
 		)
 		holder.Stdout = &holderOutputs[i]
@@ -97,6 +104,10 @@ func runLevel2SyncScenario(t *testing.T, action, wantResult string) {
 			t.Fatalf("holder-%d did not become ready\n%s", i+1, output.String())
 		}
 	}
+	if action == "same-refresh" {
+		// 让 Holder 的原始 L1 TTL 与更新节点的新 TTL 拉开超过续期阈值。
+		time.Sleep(4 * time.Second)
+	}
 
 	actor := exec.Command(binary, "-test.run=^TestLevel2CacheSync$")
 	actor.Env = append(os.Environ(),
@@ -114,7 +125,11 @@ func runLevel2SyncScenario(t *testing.T, action, wantResult string) {
 		t.Fatalf("actor process failed: %v\n%s", err, output)
 	}
 
-	time.Sleep(300 * time.Millisecond)
+	if action == "same-refresh" {
+		time.Sleep(3 * time.Second)
+	} else {
+		time.Sleep(300 * time.Millisecond)
+	}
 	if err := os.WriteFile(filepath.Join(workDir, "verify"), nil, 0o600); err != nil {
 		t.Fatalf("signal holder verification: %v", err)
 	}
@@ -135,14 +150,20 @@ func runLevel2SyncScenario(t *testing.T, action, wantResult string) {
 func runLevel2Child(t *testing.T) {
 	startRedis(t)
 	action := os.Getenv(level2ActionEnv)
+	memoryExpiration := time.Minute
+	redisExpiration := time.Minute
+	if action == "same-refresh" {
+		memoryExpiration = 6 * time.Second
+		redisExpiration = 20 * time.Second
+	}
 	serviceName := level2ServiceName
 	if action == "different-service" {
 		serviceName += "-isolated"
 	}
 	if err := cachecloud.Init(
 		cachecloud.Options{ServiceName: serviceName},
-		cachecloud.NewLevel2BucketConfig(level2BucketName, time.Minute, time.Minute),
-		cachecloud.NewLevel2BucketConfig(level2OtherBucket, time.Minute, time.Minute),
+		cachecloud.NewLevel2BucketConfig(level2BucketName, memoryExpiration, redisExpiration),
+		cachecloud.NewLevel2BucketConfig(level2OtherBucket, memoryExpiration, redisExpiration),
 	); err != nil {
 		t.Fatalf("init level2 cache: %v", err)
 	}
@@ -168,7 +189,16 @@ func runLevel2Child(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(workDir, "ready-"+nodeName), nil, 0o600); err != nil {
 			t.Fatalf("write holder ready signal: %v", err)
 		}
-		if !waitForFile(filepath.Join(workDir, "verify"), 10*time.Second) {
+		verifyFile := filepath.Join(workDir, "verify")
+		if action == "concurrent-rebuild" {
+			// 连续读取配合其他进程高频更新，覆盖 L1 驱逐与 Redis 重建交错执行的窗口。
+			for !waitForFile(verifyFile, 10*time.Millisecond) {
+				var ignored string
+				if err := cachecloud.Get(level2BucketName, key, &ignored, "primary"); err != nil && !errors.Is(err, cachecloud.ErrCacheMiss) {
+					t.Fatalf("read during concurrent rebuild: %v", err)
+				}
+			}
+		} else if !waitForFile(verifyFile, 10*time.Second) {
 			t.Fatal("wait for holder verification signal timeout")
 		}
 		result := strings.Join([]string{
@@ -186,6 +216,9 @@ func runLevel2Child(t *testing.T) {
 		deleteKeyArg := "primary"
 		switch action {
 		case "same":
+			mustPutLevel2(t, level2BucketName, key, "value-a", "primary")
+			rawDelete = true
+		case "same-refresh":
 			mustPutLevel2(t, level2BucketName, key, "value-a", "primary")
 			rawDelete = true
 		case "different-rebuild":
@@ -211,6 +244,11 @@ func runLevel2Child(t *testing.T) {
 				mustPutLevel2(t, level2BucketName, key, value, "primary")
 			}
 			rawDelete = true
+		case "concurrent-rebuild":
+			for i := range 100 {
+				mustPutLevel2(t, level2BucketName, key, fmt.Sprintf("value-%d", i), "primary")
+			}
+			mustPutLevel2(t, level2BucketName, key, "value-final", "primary")
 		default:
 			t.Fatalf("unknown actor action: %s", action)
 		}

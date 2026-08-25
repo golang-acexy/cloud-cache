@@ -2,27 +2,38 @@ package cachecloud
 
 import (
 	"encoding/json"
-	"fmt"
+	"hash/fnv"
 
-	"github.com/acexy/golang-toolkit/caching"
-	"github.com/acexy/golang-toolkit/crypto/hashing"
 	"github.com/acexy/golang-toolkit/logger"
 	"github.com/redis/go-redis/v9"
 )
 
+const cacheSyncShardCount = 256
+
+type cacheSyncOperation string
+
+const (
+	cacheSyncPut    cacheSyncOperation = "put"
+	cacheSyncDelete cacheSyncOperation = "delete"
+)
+
 type cacheSyncEvent struct {
-	NodeID     string `json:"nodeId"`
-	BucketName string `json:"bucketName"`
-	CacheKey   string `json:"cacheKey"`
-	DataHash   string `json:"dataHash,omitempty"`
+	NodeID     string             `json:"nodeId"`
+	BucketName string             `json:"bucketName"`
+	CacheKey   string             `json:"cacheKey"`
+	Operation  cacheSyncOperation `json:"operation"`
+	ValueHash  string             `json:"valueHash,omitempty"`
+	ExpireAt   int64              `json:"expireAt,omitempty"`
 }
 
-func newSyncEventPayload(bucketName, cacheKey, dataHash string) (string, error) {
+func newSyncEventPayload(bucketName, cacheKey string, operation cacheSyncOperation, valueHash string, expireAt int64) (string, error) {
 	payload, err := json.Marshal(cacheSyncEvent{
 		NodeID:     getNodeID(),
 		BucketName: bucketName,
 		CacheKey:   cacheKey,
-		DataHash:   dataHash,
+		Operation:  operation,
+		ValueHash:  valueHash,
+		ExpireAt:   expireAt,
 	})
 	if err != nil {
 		return "", err
@@ -30,9 +41,9 @@ func newSyncEventPayload(bucketName, cacheKey, dataHash string) (string, error) 
 	return string(payload), nil
 }
 
-func handleSyncMessage(manager *caching.CacheManager, message *redis.Message, cacheType string) {
+func handleSyncMessage(message *redis.Message, cacheType string, handler func(cacheSyncEvent)) {
 	var event cacheSyncEvent
-	if message == nil || json.Unmarshal([]byte(message.Payload), &event) != nil || event.NodeID == "" || event.BucketName == "" || event.CacheKey == "" {
+	if message == nil || json.Unmarshal([]byte(message.Payload), &event) != nil || !event.valid() {
 		logger.Logrus().Warningln(ErrInvalidSyncEvent, cacheType)
 		return
 	}
@@ -40,25 +51,29 @@ func handleSyncMessage(manager *caching.CacheManager, message *redis.Message, ca
 		return
 	}
 
-	bucket := manager.GetBucket(caching.NewBucketName(event.BucketName))
-	if bucket == nil {
-		logger.Logrus().Warningln(fmt.Errorf("%w: %s", ErrBucketNotFound, event.BucketName))
-		return
-	}
-	key := caching.NewCacheKey(event.CacheKey)
-	if event.DataHash == "" {
-		if err := bucket.Evict(key); err == nil {
-			logger.Logrus().Traceln(cacheType, "cache deleted", event.BucketName, event.CacheKey)
-		}
-		return
-	}
+	handler(event)
+}
 
-	data, err := bucket.GetBytes(key)
-	if err != nil {
-		return
+func (e cacheSyncEvent) valid() bool {
+	if e.NodeID == "" || e.BucketName == "" || e.CacheKey == "" {
+		return false
 	}
-	if hashing.Md5Hex(string(data)) != event.DataHash {
-		logger.Logrus().Traceln(cacheType, "cache changed", event.BucketName, event.CacheKey)
-		_ = bucket.Evict(key)
+	switch e.Operation {
+	case cacheSyncDelete:
+		return true
+	case cacheSyncPut:
+		return e.ValueHash != "" && e.ExpireAt > 0
+	default:
+		return false
 	}
+}
+
+func cacheSyncShardIndex(cacheKey string) uint32 {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(cacheKey))
+	return hash.Sum32() % cacheSyncShardCount
+}
+
+func cacheSyncLockKey(bucketName, cacheKey string) string {
+	return bucketName + ":" + cacheKey
 }
