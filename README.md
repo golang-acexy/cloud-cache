@@ -238,17 +238,34 @@ Behavior:
 
 A distributed-memory bucket stores values only in each process's memory. Redis Pub/Sub carries invalidation events; Redis does not store the cached value.
 
-When one node writes a value:
+Each local entry is stored in an internal envelope containing:
 
-1. The node writes the value to its local memory cache.
-2. It reads the actual stored bytes and calculates their hash.
-3. It publishes the bucket name, resolved cache key, node ID, and hash.
-4. Other nodes compare the event hash with their locally stored bytes.
-5. Equal values remain cached; different values are evicted and rebuilt on their next request.
+```text
+Gob payload + content hash + absolute expiration time
+```
+
+Gob remains the storage encoding. The content hash uses XXH3-128 over deterministic JSON when the value supports JSON encoding, which keeps logically equal maps stable across nodes even when their insertion order differs. Values that JSON cannot encode fall back to hashing the stored Gob payload.
+
+When one node creates or updates a value:
+
+1. The value is encoded once into the envelope and written to local memory.
+2. The node publishes a `put` event containing the node ID, bucket name, resolved key, content hash, and absolute expiration time.
+3. A receiving node ignores the event when it does not hold that key.
+4. A receiving node evicts its local value when the hashes differ.
+5. Equal values remain cached. If the remote expiration is more than three seconds later, the receiver silently extends its local expiration without publishing another event.
+
+This comparison prevents nodes that concurrently load the same logical value from repeatedly evicting each other. Local reads, writes, deletes, and remote synchronization for the same bucket and key are serialized through fixed synchronization shards so an expiration refresh cannot overwrite a concurrent local update.
 
 When one node calls `Evict`, it attempts to publish a delete event regardless of the local deletion result. Other nodes then evict the same bucket and cache key.
 
-Synchronization is isolated by both `ServiceName` and `BucketName`. Messages from the publishing node itself are ignored.
+Synchronization is isolated by both `ServiceName` and `BucketName`. Messages from the publishing node itself are ignored, and applying a remote event never publishes another event.
+
+Important behavior:
+
+- `Cacheable` rebuilds remain node-local values; Redis transports synchronization metadata, not the cached payload.
+- Equal-value events may extend an entry only up to the receiving bucket's configured expiration limit.
+- Expiration times use Unix milliseconds and are independent of time zones, but participating hosts should keep their system clocks synchronized.
+- Redis Pub/Sub does not replay messages missed while a node is disconnected. Local expiration remains the final convergence boundary after a missed event.
 
 ## Level-2 Cache
 

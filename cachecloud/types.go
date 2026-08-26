@@ -12,7 +12,6 @@ const (
 	BucketTypeDistMem BucketType = "dist-mem"
 	BucketTypeRedis   BucketType = "redis"
 	BucketTypeLevel2  BucketType = "level-2"
-
 )
 
 // Options 定义缓存模块的全局配置。
