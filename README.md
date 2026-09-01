@@ -8,7 +8,7 @@ This package owns cache policy rather than Redis lifecycle. It standardizes appl
 
 ## Requirements
 
-Current module Go version: `1.25.8`.
+Current module Go version: `1.26.7`.
 
 ## Installation
 
