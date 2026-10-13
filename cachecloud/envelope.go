@@ -5,20 +5,23 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/hex"
-	"encoding/json"
+	"reflect"
 	"time"
 
+	"github.com/golang-acexy/cloud-cache/internal/stablehash"
 	"github.com/zeebo/xxh3"
 )
 
 const cacheExpirationTolerance = 3 * time.Second
 
-// cacheValueEnvelope 保存缓存的真实序列化内容及其同步元数据。
-// ValueHash 始终基于 Payload 计算，保证广播摘要与实际缓存内容一致。
+// cacheValueEnvelope stores Gob payload bytes with their hash and a millisecond deadline.
 type cacheValueEnvelope struct {
-	Payload   []byte
+	// Payload contains the Gob-encoded cache value.
+	Payload []byte
+	// ValueHash identifies the decoded value, with a tagged payload fallback.
 	ValueHash string
-	ExpireAt  int64
+	// ExpireAt is the logical expiration timestamp in Unix milliseconds.
+	ExpireAt int64
 }
 
 func newCacheValueEnvelope(data any, expiration time.Duration) (cacheValueEnvelope, error) {
@@ -27,21 +30,23 @@ func newCacheValueEnvelope(data any, expiration time.Duration) (cacheValueEnvelo
 		return cacheValueEnvelope{}, err
 	}
 	dataBytes := payload.Bytes()
+	// Hash the stored representation: Gob may discard or transform input fields.
+	decoded := reflect.New(reflect.TypeOf(data))
+	if err := gob.NewDecoder(bytes.NewReader(dataBytes)).Decode(decoded.Interface()); err != nil {
+		return cacheValueEnvelope{}, err
+	}
+	valueHash, err := stablehash.Sum(decoded.Elem().Interface())
+	if err != nil {
+		// Preserve Gob-compatible values outside the canonicalizer's type or resource limits.
+		valueHash = "gob:" + xxh3Hex(dataBytes)
+	} else {
+		valueHash = "stable:" + valueHash
+	}
 	return cacheValueEnvelope{
 		Payload:   dataBytes,
-		ValueHash: cacheValueHash(data, dataBytes),
+		ValueHash: valueHash,
 		ExpireAt:  time.Now().Add(expiration).UnixMilli(),
 	}, nil
-}
-
-// cacheValueHash 优先使用 JSON 的确定性编码计算内容摘要，避免 map 的 Gob 编码顺序
-// 在不同节点间产生误判。JSON 不支持的值仍以实际 Gob Payload 作为降级摘要输入。
-func cacheValueHash(data any, fallbackPayload []byte) string {
-	hashPayload, err := json.Marshal(data)
-	if err != nil {
-		hashPayload = fallbackPayload
-	}
-	return xxh3Hex(hashPayload)
 }
 
 func xxh3Hex(data []byte) string {
@@ -60,20 +65,12 @@ func (e cacheValueEnvelope) expired(now time.Time) bool {
 	return e.ExpireAt <= now.UnixMilli()
 }
 
-// extendExpiration 在不超过本地缓存有效期上限的前提下延长逻辑过期时间。
-// 小于容差的时间差不会触发底层缓存重写，避免多节点间频繁续期。
+// extendExpiration requires a future capped deadline advancing by strictly more than three seconds.
 func (e *cacheValueEnvelope) extendExpiration(remoteExpireAt int64, maxExpiration time.Duration, now time.Time) bool {
-	targetExpireAt := minExpireAt(remoteExpireAt, now.Add(maxExpiration).UnixMilli())
-	if targetExpireAt <= e.ExpireAt+cacheExpirationTolerance.Milliseconds() {
+	targetExpireAt := min(remoteExpireAt, now.Add(maxExpiration).UnixMilli())
+	if targetExpireAt <= now.UnixMilli() || targetExpireAt <= e.ExpireAt+cacheExpirationTolerance.Milliseconds() {
 		return false
 	}
 	e.ExpireAt = targetExpireAt
 	return true
-}
-
-func minExpireAt(first, second int64) int64 {
-	if first < second {
-		return first
-	}
-	return second
 }

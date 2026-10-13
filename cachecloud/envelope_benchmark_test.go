@@ -96,7 +96,11 @@ func BenchmarkCacheValueHash(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(size))
 			for range b.N {
-				benchmarkHash = cacheValueHash(value, nil)
+				payload, err := json.Marshal(value)
+				if err != nil {
+					b.Fatal(err)
+				}
+				benchmarkHash = xxh3Hex(payload)
 			}
 		})
 	}

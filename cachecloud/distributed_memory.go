@@ -8,14 +8,13 @@ import (
 
 	"github.com/acexy/golang-toolkit/caching"
 	toolkitError "github.com/acexy/golang-toolkit/error"
-	"github.com/acexy/golang-toolkit/logger"
 	"github.com/golang-acexy/starter-redis/redisstarter"
 	"github.com/redis/go-redis/v9"
 )
 
 const distMemSyncTopicName = "dis-mem-sync-topic"
 
-var distMemSyncCmd = redisstarter.TopicCmd()
+var distMemSyncCmd cacheSyncTopic = redisstarter.TopicCmd()
 
 type distMemCacheManager struct {
 	buckets   map[BucketName]*distMemCacheBucket
@@ -92,12 +91,16 @@ func (m *distMemCacheBucket) publishEvent(cacheKey string, operation cacheSyncOp
 	return distMemSyncCmd.Publish(redisstarter.NewRedisKey(m.syncTopic), payload)
 }
 
+// Get reads this bucket; empty resolved keys return ErrCacheKeyRequired, and backend failures remain distinct from ErrCacheMiss.
 func (m *distMemCacheBucket) Get(key CacheKey, result any, keyArgs ...any) error {
 	rawKey := key.RawKeyString(keyArgs...)
+	if rawKey == "" {
+		return ErrCacheKeyRequired
+	}
 	lock := m.owner.syncLock(cacheSyncLockKey(m.bucketName, rawKey))
 	lock.Lock()
 	var envelope cacheValueEnvelope
-	err := m.manager.Get(m.managerBucketName, caching.NewCacheKey(key.KeyFormat), &envelope, keyArgs...)
+	err := m.manager.Get(m.managerBucketName, caching.NewCacheKey(rawKey), &envelope)
 	if errors.Is(err, toolkitError.ErrCacheMiss) {
 		lock.Unlock()
 		return ErrCacheMiss
@@ -107,7 +110,7 @@ func (m *distMemCacheBucket) Get(key CacheKey, result any, keyArgs ...any) error
 		return err
 	}
 	if envelope.expired(time.Now()) {
-		_ = m.manager.Evict(m.managerBucketName, caching.NewCacheKey(key.KeyFormat), keyArgs...)
+		_ = evictMemory(m.manager, m.managerBucketName, caching.NewCacheKey(rawKey))
 		lock.Unlock()
 		return ErrCacheMiss
 	}
@@ -115,16 +118,20 @@ func (m *distMemCacheBucket) Get(key CacheKey, result any, keyArgs ...any) error
 	return envelope.decode(result)
 }
 
+// Put rejects empty resolved keys and stores a value; publication errors do not roll back stored data.
 func (m *distMemCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
+	rawKey := key.RawKeyString(keyArgs...)
+	if rawKey == "" {
+		return ErrCacheKeyRequired
+	}
 	envelope, err := newCacheValueEnvelope(data, m.expiration)
 	if err != nil {
 		return err
 	}
-	cacheKey := caching.NewCacheKey(key.KeyFormat)
-	rawKey := key.RawKeyString(keyArgs...)
+	cacheKey := caching.NewCacheKey(rawKey)
 	lock := m.owner.syncLock(cacheSyncLockKey(m.bucketName, rawKey))
 	lock.Lock()
-	if err = m.manager.Put(m.managerBucketName, cacheKey, envelope, keyArgs...); err != nil {
+	if err = m.manager.Put(m.managerBucketName, cacheKey, envelope); err != nil {
 		lock.Unlock()
 		return err
 	}
@@ -132,11 +139,15 @@ func (m *distMemCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
 	return m.publishEvent(rawKey, cacheSyncPut, envelope)
 }
 
+// Evict removes the entry and publishes invalidation; absent entries succeed.
 func (m *distMemCacheBucket) Evict(key CacheKey, keyArgs ...any) error {
 	rawKey := key.RawKeyString(keyArgs...)
+	if rawKey == "" {
+		return ErrCacheKeyRequired
+	}
 	lock := m.owner.syncLock(cacheSyncLockKey(m.bucketName, rawKey))
 	lock.Lock()
-	localErr := m.manager.Evict(m.managerBucketName, caching.NewCacheKey(key.KeyFormat), keyArgs...)
+	localErr := evictMemory(m.manager, m.managerBucketName, caching.NewCacheKey(rawKey))
 	lock.Unlock()
 	publishErr := m.publishEvent(rawKey, cacheSyncDelete, cacheValueEnvelope{})
 	return errors.Join(localErr, publishErr)
@@ -147,29 +158,5 @@ func (m *distMemCacheBucket) applySyncEvent(event cacheSyncEvent) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	key := caching.NewCacheKey(event.CacheKey)
-	if event.Operation == cacheSyncDelete {
-		if err := m.manager.Evict(m.managerBucketName, key); err == nil {
-			logger.Logrus().Tracef("distributed memory cache sync evicted key: bucket=%s key=%s operation=%s", m.bucketName, event.CacheKey, event.Operation)
-		}
-		return
-	}
-
-	var local cacheValueEnvelope
-	if err := m.manager.Get(m.managerBucketName, key, &local); err != nil {
-		return
-	}
-	if local.ValueHash != event.ValueHash {
-		if err := m.manager.Evict(m.managerBucketName, key); err == nil {
-			logger.Logrus().Tracef("distributed memory cache sync evicted key: bucket=%s key=%s operation=%s reason=hash-mismatch", m.bucketName, event.CacheKey, event.Operation)
-		}
-		return
-	}
-
-	// 相同内容只静默续期，不再次广播，避免同步消息形成循环。
-	if local.extendExpiration(event.ExpireAt, m.expiration, time.Now()) {
-		if err := m.manager.Put(m.managerBucketName, key, local); err == nil {
-			logger.Logrus().Tracef("distributed memory cache sync extended expiration: bucket=%s key=%s expireAt=%d", m.bucketName, event.CacheKey, local.ExpireAt)
-		}
-	}
+	applyMemorySyncEvent(m.manager, m.managerBucketName, m.bucketName, m.expiration, "distributed memory", event)
 }
