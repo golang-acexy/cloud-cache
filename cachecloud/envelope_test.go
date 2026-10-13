@@ -1,137 +1,165 @@
 package cachecloud
 
 import (
+	"bytes"
+	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
+
+	"github.com/golang-acexy/cloud-cache/internal/stablehash"
 )
 
-const cacheValueHashTestIterations = 256
-
-type cacheValueHashTestModel struct {
-	Name       string
-	Attributes map[string]int
-	Groups     map[string]map[int]string
-	Tags       []string
+type hashTestValue struct {
+	Name     string
+	Revision int `json:"-"`
 }
 
-func TestCacheValueHashStableForMapInsertionOrder(t *testing.T) {
-	want := cacheValueHash(map[string]int{
-		"alpha": 1,
-		"beta":  2,
-		"gamma": 3,
-		"delta": 4,
-	}, nil)
-
-	keys := []string{"alpha", "beta", "gamma", "delta"}
-	values := map[string]int{"alpha": 1, "beta": 2, "gamma": 3, "delta": 4}
-	for iteration := range cacheValueHashTestIterations {
-		value := make(map[string]int, len(keys))
-		for offset := range len(keys) {
-			key := keys[(iteration+offset)%len(keys)]
-			value[key] = values[key]
-		}
-		if got := cacheValueHash(value, nil); got != want {
-			t.Fatalf("map hash changed at iteration %d: got %s, want %s", iteration, got, want)
+func TestEnvelopeHashUsesStoredPayload(t *testing.T) {
+	values := []any{hashTestValue{"value", 1}, map[string]int{"a": 1, "b": 2, "c": 3}, map[string]map[int]string{"nested": {1: "one", 2: "two"}}}
+	for _, value := range values {
+		for range 16 {
+			envelope, err := newCacheValueEnvelope(value, time.Minute)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := reflect.New(reflect.TypeOf(value))
+			if err := envelope.decode(result.Interface()); err != nil {
+				t.Fatal(err)
+			}
+			want, err := stablehash.Sum(result.Elem().Interface())
+			if err != nil || envelope.ValueHash != "stable:"+want {
+				t.Fatalf("hash does not describe decoded payload: %v", err)
+			}
+			if !reflect.DeepEqual(result.Elem().Interface(), value) {
+				t.Fatal("payload round trip changed data")
+			}
 		}
 	}
 }
 
-func TestCacheValueHashStableForNestedComplexValue(t *testing.T) {
-	first := cacheValueHashTestModel{
-		Name: "complex",
-		Attributes: map[string]int{
-			"alpha": 1,
-			"beta":  2,
-			"gamma": 3,
-		},
-		Groups: map[string]map[int]string{
-			"first":  {2: "two", 1: "one"},
-			"second": {4: "four", 3: "three"},
-		},
-		Tags: []string{"one", "two", "three"},
-	}
-	second := cacheValueHashTestModel{
-		Name: "complex",
-		Attributes: map[string]int{
-			"gamma": 3,
-			"alpha": 1,
-			"beta":  2,
-		},
-		Groups: map[string]map[int]string{
-			"second": {3: "three", 4: "four"},
-			"first":  {1: "one", 2: "two"},
-		},
-		Tags: []string{"one", "two", "three"},
-	}
-
-	firstEnvelope, err := newCacheValueEnvelope(first, time.Minute)
+func TestEnvelopeHashIncludesJSONOmittedFields(t *testing.T) {
+	first, err := newCacheValueEnvelope(hashTestValue{"value", 1}, time.Minute)
 	if err != nil {
-		t.Fatalf("create first complex envelope: %v", err)
+		t.Fatal(err)
 	}
-	secondEnvelope, err := newCacheValueEnvelope(second, time.Minute)
+	second, err := newCacheValueEnvelope(hashTestValue{"value", 2}, time.Minute)
 	if err != nil {
-		t.Fatalf("create second complex envelope: %v", err)
+		t.Fatal(err)
 	}
-	if firstEnvelope.ValueHash != secondEnvelope.ValueHash {
-		t.Fatalf("logically equal complex values must have the same hash: first=%s second=%s", firstEnvelope.ValueHash, secondEnvelope.ValueHash)
+	a, _ := json.Marshal(hashTestValue{"value", 1})
+	b, _ := json.Marshal(hashTestValue{"value", 2})
+	if !bytes.Equal(a, b) {
+		t.Fatal("test requires JSON-equivalent values")
+	}
+	if first.ValueHash == second.ValueHash {
+		t.Fatal("stored field changes must change the hash")
 	}
 }
 
-func TestCacheValueHashTreatsPointerAndValueEqually(t *testing.T) {
-	value := cacheValueHashTestModel{
-		Name:       "model",
-		Attributes: map[string]int{"alpha": 1},
-		Groups:     map[string]map[int]string{"group": {1: "one"}},
-		Tags:       []string{"one"},
+func TestEnvelopeHashIgnoresExpiration(t *testing.T) {
+	value := hashTestValue{"same", 1}
+	first, err := newCacheValueEnvelope(value, time.Minute)
+	if err != nil {
+		t.Fatal(err)
 	}
-	valueHash := cacheValueHash(value, nil)
-	pointerHash := cacheValueHash(&value, nil)
-	if valueHash != pointerHash {
-		t.Fatalf("pointer and value hashes must match: value=%s pointer=%s", valueHash, pointerHash)
+	second, err := newCacheValueEnvelope(&value, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first.Payload, second.Payload) || first.ValueHash != second.ValueHash {
+		t.Fatal("equal scalar payloads must share a hash")
+	}
+	if first.ExpireAt == second.ExpireAt {
+		t.Fatal("test requires different deadlines")
 	}
 }
 
-func TestCacheValueHashChangesWithContent(t *testing.T) {
-	base := cacheValueHash(map[string]int{"alpha": 1, "beta": 2}, nil)
-	tests := []struct {
-		name  string
-		value any
+func TestEnvelopeExpirationExtension(t *testing.T) {
+	now := time.Unix(100, 0)
+	for _, tc := range []struct {
+		name                     string
+		local, remote, ttl, want int64
+		changed                  bool
 	}{
-		{name: "changed value", value: map[string]int{"alpha": 1, "beta": 3}},
-		{name: "added field", value: map[string]int{"alpha": 1, "beta": 2, "gamma": 3}},
-		{name: "removed field", value: map[string]int{"alpha": 1}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := cacheValueHash(test.value, nil); got == base {
-				t.Fatalf("different content unexpectedly produced the same hash: %s", got)
+		{"cap", 110, 150, 30, 130, true},
+		{"exact tolerance", 110, 113, 30, 110, false},
+		{"small advance", 110, 112, 30, 110, false},
+		{"expired target", 90, 99, 30, 90, false},
+		{"target equals now", 90, 100, 30, 90, false},
+		{"expired local can renew", 90, 120, 30, 120, true},
+		{"no shortening", 130, 120, 30, 130, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			envelope := cacheValueEnvelope{ExpireAt: tc.local * 1000}
+			changed := envelope.extendExpiration(tc.remote*1000, time.Duration(tc.ttl)*time.Second, now)
+			if changed != tc.changed || envelope.ExpireAt != tc.want*1000 {
+				t.Fatalf("changed=%v expiration=%d", changed, envelope.ExpireAt)
 			}
 		})
 	}
 }
 
-func TestCacheValueHashStableAcrossRepeatedEnvelopeEncoding(t *testing.T) {
-	wantValue := cacheValueHashTestModel{
-		Name:       "repeated",
-		Attributes: map[string]int{"alpha": 1, "beta": 2, "gamma": 3},
-		Groups:     map[string]map[int]string{"group": {1: "one", 2: "two"}},
-		Tags:       []string{"one", "two"},
+// storedTransform exercises a custom codec that changes the observable value.
+type storedTransform struct{ Value string }
+
+func (v storedTransform) GobEncode() ([]byte, error) { return []byte(v.Value), nil }
+func (v *storedTransform) GobDecode(data []byte) error {
+	v.Value = "decoded:" + string(data)
+	return nil
+}
+
+func TestEnvelopeHashesDecodedValue(t *testing.T) {
+	input := storedTransform{Value: "input"}
+	envelope, err := newCacheValueEnvelope(input, time.Minute)
+	if err != nil {
+		t.Fatal(err)
 	}
-	var wantHash string
-	for iteration := range cacheValueHashTestIterations {
-		envelope, err := newCacheValueEnvelope(wantValue, time.Minute)
+	var output storedTransform
+	if err := envelope.decode(&output); err != nil {
+		t.Fatal(err)
+	}
+	want, err := stablehash.Sum(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, _ := stablehash.Sum(input)
+	if envelope.ValueHash != "stable:"+want || want == original {
+		t.Fatal("digest must describe the transformed stored value")
+	}
+}
+
+func TestEnvelopeStableMapsAndFallback(t *testing.T) {
+	var first string
+	for i := range 100 {
+		value := make(map[int]string)
+		for j := range 20 {
+			value[(i+j)%20] = "value"
+		}
+		envelope, err := newCacheValueEnvelope(value, time.Minute)
 		if err != nil {
-			t.Fatalf("encode envelope at iteration %d: %v", iteration, err)
+			t.Fatal(err)
 		}
-		if iteration == 0 {
-			wantHash = envelope.ValueHash
-			continue
+		if i == 0 {
+			first = envelope.ValueHash
 		}
-		if envelope.ValueHash != wantHash {
-			t.Fatalf("envelope hash changed at iteration %d: got %s, want %s", iteration, envelope.ValueHash, wantHash)
+		if envelope.ValueHash != first {
+			t.Fatal("map order changed the digest")
 		}
 	}
-	if wantHash == "" {
-		t.Fatal("expected a non-empty hash")
+	for _, value := range []any{
+		struct {
+			Public  string
+			private int
+		}{Public: "value", private: 1},
+		map[*int]string{new(int): "value"},
+	} {
+		envelope, err := newCacheValueEnvelope(value, time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if envelope.ValueHash != "gob:"+xxh3Hex(envelope.Payload) {
+			t.Fatal("unsupported values must use tagged payload fallback")
+		}
 	}
 }

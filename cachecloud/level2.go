@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	level2SyncTopicName  = "2l-mem-sync-topic"
+	level2SyncTopicName  = "l2-mem-sync-topic"
 	level2RebuildRetries = 3
 )
 
-var level2SyncCmd = redisstarter.TopicCmd()
+var level2SyncCmd cacheSyncTopic = redisstarter.TopicCmd()
 
 type level2CacheManager struct {
 	buckets   map[BucketName]*level2CacheBucket
@@ -27,7 +27,7 @@ type level2CacheManager struct {
 	shards    [cacheSyncShardCount]level2SyncShard
 }
 
-// level2SyncShard 串行化同一分片内的 L1 更新，并记录事件代数以阻止旧值重建。
+// level2SyncShard serializes L1 changes and tracks generations to reject stale fills.
 type level2SyncShard struct {
 	sync.Mutex
 	generation uint64
@@ -55,6 +55,7 @@ func newLevel2CacheManager(serviceName string, configs []BucketConfig) (*level2C
 				keyPrefix:  redisKeyPrefix + string(config.bucketName) + ":",
 				expiration: config.redisExpiration,
 			},
+			redisExpiration:  config.redisExpiration,
 			bucketName:       string(config.bucketName),
 			syncTopic:        syncTopic,
 			memoryExpiration: config.memoryExpiration,
@@ -92,7 +93,8 @@ func (m *level2CacheManager) getBucket(bucketName BucketName) *level2CacheBucket
 type level2CacheBucket struct {
 	memoryManager    *caching.CacheManager
 	memoryBucketName caching.BucketName
-	redisBucket      *redisCacheBucket
+	redisBucket      CacheBucket
+	redisExpiration  time.Duration
 	bucketName       string
 	syncTopic        string
 	memoryExpiration time.Duration
@@ -107,16 +109,20 @@ func (m *level2CacheBucket) publishEvent(cacheKey string, operation cacheSyncOpe
 	return level2SyncCmd.Publish(redisstarter.NewRedisKey(m.syncTopic), payload)
 }
 
+// Get reads this bucket; empty resolved keys return ErrCacheKeyRequired, and backend failures remain distinct from ErrCacheMiss.
 func (m *level2CacheBucket) Get(key CacheKey, result any, keyArgs ...any) error {
-	cacheKey := caching.NewCacheKey(key.KeyFormat)
 	rawKey := key.RawKeyString(keyArgs...)
+	if rawKey == "" {
+		return ErrCacheKeyRequired
+	}
+	cacheKey := caching.NewCacheKey(rawKey)
 	shard := m.owner.syncShard(cacheSyncLockKey(m.bucketName, rawKey))
 	shard.Lock()
 	var envelope cacheValueEnvelope
-	err := m.memoryManager.Get(m.memoryBucketName, cacheKey, &envelope, keyArgs...)
+	err := m.memoryManager.Get(m.memoryBucketName, cacheKey, &envelope)
 	if err == nil {
 		if envelope.expired(time.Now()) {
-			_ = m.memoryManager.Evict(m.memoryBucketName, cacheKey, keyArgs...)
+			_ = evictMemory(m.memoryManager, m.memoryBucketName, cacheKey)
 		} else {
 			shard.Unlock()
 			return envelope.decode(result)
@@ -128,39 +134,51 @@ func (m *level2CacheBucket) Get(key CacheKey, result any, keyArgs ...any) error 
 	}
 
 	logger.Logrus().Traceln("memory cache missed", rawKey, "check redis")
-	return m.rebuildFromRedis(key, result, keyArgs...)
+	return m.rebuildFromRedis(NewCacheKey(rawKey), result)
 }
 
+// Put rejects empty resolved keys and stores a value; publication errors do not roll back stored data.
 func (m *level2CacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
-	redisEnvelope, err := newCacheValueEnvelope(data, m.redisBucket.expiration)
+	rawKey := key.RawKeyString(keyArgs...)
+	if rawKey == "" {
+		return ErrCacheKeyRequired
+	}
+	redisEnvelope, err := newCacheValueEnvelope(data, m.redisExpiration)
 	if err != nil {
 		return err
 	}
-	rawKey := key.RawKeyString(keyArgs...)
 	shard := m.owner.syncShard(cacheSyncLockKey(m.bucketName, rawKey))
 	shard.Lock()
 	shard.generation++
-	if err = m.redisBucket.Put(key, redisEnvelope, keyArgs...); err != nil {
+	if err = m.redisBucket.Put(NewCacheKey(rawKey), redisEnvelope); err != nil {
 		shard.Unlock()
 		return err
 	}
 	memoryEnvelope := redisEnvelope
-	memoryEnvelope.ExpireAt = minExpireAt(redisEnvelope.ExpireAt, time.Now().Add(m.memoryExpiration).UnixMilli())
-	cacheKey := caching.NewCacheKey(key.KeyFormat)
-	memoryErr := m.memoryManager.Put(m.memoryBucketName, cacheKey, memoryEnvelope, keyArgs...)
+	memoryEnvelope.ExpireAt = min(redisEnvelope.ExpireAt, time.Now().Add(m.memoryExpiration).UnixMilli())
+	cacheKey := caching.NewCacheKey(rawKey)
+	memoryErr := m.memoryManager.Put(m.memoryBucketName, cacheKey, memoryEnvelope)
+	if memoryErr != nil {
+		// Clear an older local value while still holding the mutation lock.
+		memoryErr = errors.Join(memoryErr, evictMemory(m.memoryManager, m.memoryBucketName, cacheKey))
+	}
 	shard.Unlock()
-	// Redis 已成功写入时，即使当前节点 L1 更新失败，也必须通知其他节点驱逐旧值。
+	// Publish after a successful Redis write even if the local L1 write failed.
 	publishErr := m.publishEvent(rawKey, cacheSyncPut, memoryEnvelope)
 	return errors.Join(memoryErr, publishErr)
 }
 
+// Evict removes the entry and publishes invalidation; absent entries succeed.
 func (m *level2CacheBucket) Evict(key CacheKey, keyArgs ...any) error {
 	rawKey := key.RawKeyString(keyArgs...)
+	if rawKey == "" {
+		return ErrCacheKeyRequired
+	}
 	shard := m.owner.syncShard(cacheSyncLockKey(m.bucketName, rawKey))
 	shard.Lock()
 	shard.generation++
-	redisErr := m.redisBucket.Evict(key, keyArgs...)
-	memoryErr := m.memoryManager.Evict(m.memoryBucketName, caching.NewCacheKey(key.KeyFormat), keyArgs...)
+	redisErr := m.redisBucket.Evict(NewCacheKey(rawKey))
+	memoryErr := evictMemory(m.memoryManager, m.memoryBucketName, caching.NewCacheKey(rawKey))
 	shard.Unlock()
 	publishErr := m.publishEvent(rawKey, cacheSyncDelete, cacheValueEnvelope{})
 	return errors.Join(redisErr, memoryErr, publishErr)
@@ -183,11 +201,15 @@ func (m *level2CacheBucket) rebuildFromRedis(key CacheKey, result any, keyArgs .
 			return ErrCacheMiss
 		}
 
-		latest.ExpireAt = minExpireAt(latest.ExpireAt, time.Now().Add(m.memoryExpiration).UnixMilli())
+		latest.ExpireAt = min(latest.ExpireAt, time.Now().Add(m.memoryExpiration).UnixMilli())
 		shard.Lock()
 		if generation != shard.generation {
 			shard.Unlock()
 			continue
+		}
+		if latest.expired(time.Now()) {
+			shard.Unlock()
+			return ErrCacheMiss
 		}
 		err := m.memoryManager.Put(m.memoryBucketName, caching.NewCacheKey(rawKey), latest)
 		shard.Unlock()
@@ -197,7 +219,10 @@ func (m *level2CacheBucket) rebuildFromRedis(key CacheKey, result any, keyArgs .
 		return latest.decode(result)
 	}
 
-	// 热点 Key 持续变化时仍返回 Redis 结果，但不写入可能已经过期的 L1。
+	// Bound retries, but never intentionally return an already expired snapshot.
+	if latest.expired(time.Now()) {
+		return ErrCacheMiss
+	}
 	return latest.decode(result)
 }
 
@@ -207,28 +232,5 @@ func (m *level2CacheBucket) applySyncEvent(event cacheSyncEvent) {
 	defer shard.Unlock()
 	shard.generation++
 
-	key := caching.NewCacheKey(event.CacheKey)
-	if event.Operation == cacheSyncDelete {
-		if err := m.memoryManager.Evict(m.memoryBucketName, key); err == nil {
-			logger.Logrus().Tracef("level2 memory cache sync evicted key: bucket=%s key=%s operation=%s", m.bucketName, event.CacheKey, event.Operation)
-		}
-		return
-	}
-
-	var local cacheValueEnvelope
-	if err := m.memoryManager.Get(m.memoryBucketName, key, &local); err != nil {
-		return
-	}
-	if local.ValueHash != event.ValueHash {
-		if err := m.memoryManager.Evict(m.memoryBucketName, key); err == nil {
-			logger.Logrus().Tracef("level2 memory cache sync evicted key: bucket=%s key=%s operation=%s reason=hash-mismatch", m.bucketName, event.CacheKey, event.Operation)
-		}
-		return
-	}
-
-	if local.extendExpiration(event.ExpireAt, m.memoryExpiration, time.Now()) {
-		if err := m.memoryManager.Put(m.memoryBucketName, key, local); err == nil {
-			logger.Logrus().Tracef("level2 memory cache sync extended expiration: bucket=%s key=%s expireAt=%d", m.bucketName, event.CacheKey, local.ExpireAt)
-		}
-	}
+	applyMemorySyncEvent(m.memoryManager, m.memoryBucketName, m.bucketName, m.memoryExpiration, "level2 memory", event)
 }

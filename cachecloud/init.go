@@ -2,6 +2,7 @@ package cachecloud
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/acexy/golang-toolkit/util/str"
@@ -19,7 +20,11 @@ var runtimeState struct {
 	instance *cacheRuntime
 }
 
-// Init 初始化全部缓存桶。初始化成功前不会发布任何全局运行状态。
+// Init validates configuration and publishes one process-wide runtime after constructing all buckets.
+// Service and bucket names containing colon or percent characters return ErrInvalidCacheName.
+// A subsequent valid call returns ErrAlreadyInitialized; invalid configuration is checked first.
+// Start Redis first for Redis-backed modes; success does not verify Redis health or subscription readiness.
+// There is no public shutdown, reset, or reconfiguration API; failed construction does not clean up all allocated resources.
 func Init(options Options, bucketConfigs ...BucketConfig) error {
 	if err := validateConfig(options, bucketConfigs); err != nil {
 		return err
@@ -65,6 +70,9 @@ func validateConfig(options Options, bucketConfigs []BucketConfig) error {
 	if !str.HasText(options.ServiceName) {
 		return ErrServiceNameRequired
 	}
+	if strings.ContainsAny(options.ServiceName, ":%") {
+		return ErrInvalidCacheName
+	}
 	if len(bucketConfigs) == 0 {
 		return ErrBucketConfigRequired
 	}
@@ -73,6 +81,9 @@ func validateConfig(options Options, bucketConfigs []BucketConfig) error {
 	for _, config := range bucketConfigs {
 		if !str.HasText(string(config.bucketName)) {
 			return ErrBucketNameRequired
+		}
+		if strings.ContainsAny(string(config.bucketName), ":%") {
+			return fmt.Errorf("%w: %s", ErrInvalidCacheName, config.bucketName)
 		}
 		if _, exists := bucketNames[config.bucketName]; exists {
 			return fmt.Errorf("%w: %s", ErrDuplicateBucket, config.bucketName)

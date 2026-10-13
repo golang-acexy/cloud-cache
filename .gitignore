@@ -25,3 +25,6 @@ go.work.sum
 .env
 
 .idea
+
+# Local link to workspace internal documentation
+/docs

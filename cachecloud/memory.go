@@ -5,6 +5,7 @@ import (
 
 	"github.com/acexy/golang-toolkit/caching"
 	toolkitError "github.com/acexy/golang-toolkit/error"
+	"github.com/allegro/bigcache/v3"
 )
 
 type memoryCacheManager struct {
@@ -41,6 +42,7 @@ type memoryCacheBucket struct {
 	bucketName caching.BucketName
 }
 
+// Get reads and decodes this bucket; backend failures are distinct from ErrCacheMiss.
 func (m *memoryCacheBucket) Get(key CacheKey, result any, keyArgs ...any) error {
 	err := m.manager.Get(m.bucketName, caching.NewCacheKey(key.KeyFormat), result, keyArgs...)
 	if errors.Is(err, toolkitError.ErrCacheMiss) {
@@ -49,10 +51,20 @@ func (m *memoryCacheBucket) Get(key CacheKey, result any, keyArgs ...any) error 
 	return err
 }
 
+// Put encodes and stores a value using the bucket expiration.
 func (m *memoryCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
 	return m.manager.Put(m.bucketName, caching.NewCacheKey(key.KeyFormat), data, keyArgs...)
 }
 
+// Evict removes an entry; an absent entry succeeds.
 func (m *memoryCacheBucket) Evict(key CacheKey, keyArgs ...any) error {
-	return m.manager.Evict(m.bucketName, caching.NewCacheKey(key.KeyFormat), keyArgs...)
+	return evictMemory(m.manager, m.bucketName, caching.NewCacheKey(key.KeyFormat), keyArgs...)
+}
+
+func evictMemory(manager *caching.CacheManager, bucket caching.BucketName, key caching.CacheKey, args ...any) error {
+	err := manager.Evict(bucket, key, args...)
+	if errors.Is(err, bigcache.ErrEntryNotFound) {
+		return nil
+	}
+	return err
 }

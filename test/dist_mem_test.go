@@ -92,7 +92,13 @@ func TestDistributedMemoryConcurrentSync(t *testing.T) {
 			wantByRole: map[string]string{"holder": "miss"},
 		},
 		{
-			name:       "complex map value remains consistent across nodes",
+			name:       "JSON-omitted field change invalidates remote memory",
+			scenario:   "hidden-field",
+			roles:      []string{"holder", "updater"},
+			wantByRole: map[string]string{"holder": "miss", "updater": "revision:2"},
+		},
+		{
+			name:       "equal complex maps retain local values after synchronization",
 			scenario:   "complex-map",
 			roles:      []string{"worker", "worker", "worker"},
 			wantByRole: map[string]string{"worker": "hit:complex-value"},
@@ -195,7 +201,11 @@ func runDistMemConcurrentChild(t *testing.T) {
 	key := cachecloud.NewCacheKey("concurrent-key")
 
 	if role == "holder" {
-		if err := cachecloud.Put(distMemBucketName, key, "value-a"); err != nil {
+		var initial any = "value-a"
+		if scenario == "hidden-field" {
+			initial = integrationValue{Name: "value", Revision: 1}
+		}
+		if err := cachecloud.Put(distMemBucketName, key, initial); err != nil {
 			t.Fatalf("holder put initial value: %v", err)
 		}
 	}
@@ -231,6 +241,12 @@ func runDistMemConcurrentChild(t *testing.T) {
 			}
 			if err := cachecloud.Put(distMemBucketName, key, value); err != nil {
 				t.Fatalf("concurrent updater put different value: %v", err)
+			}
+		}
+	case "hidden-field":
+		if role == "updater" {
+			if err := cachecloud.Put(distMemBucketName, key, integrationValue{Name: "value", Revision: 2}); err != nil {
+				t.Fatal(err)
 			}
 		}
 	case "complex-map":
@@ -269,6 +285,9 @@ func newDistMemComplexValue() distMemComplexValue {
 
 func readDistMemConcurrentResult(t *testing.T, scenario string, key cachecloud.CacheKey) string {
 	t.Helper()
+	if scenario == "hidden-field" {
+		return readHiddenFieldResult(t, distMemBucketName, key)
+	}
 	if scenario != "complex-map" {
 		var value string
 		err := cachecloud.Get(distMemBucketName, key, &value)

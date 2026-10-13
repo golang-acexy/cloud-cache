@@ -64,7 +64,13 @@ func TestLevel2ConcurrentSync(t *testing.T) {
 			wantByRole: map[string]string{},
 		},
 		{
-			name:       "complex map value remains in level1 after Redis deletion",
+			name:       "JSON-omitted field change rebuilds remote L1",
+			scenario:   "hidden-field",
+			roles:      []string{"holder", "updater"},
+			wantByRole: map[string]string{"holder": "revision:2", "updater": "revision:2"},
+		},
+		{
+			name:       "equal complex maps retain L1 without Redis fallback",
 			scenario:   "complex-map",
 			roles:      []string{"holder", "holder", "updater"},
 			wantByRole: map[string]string{"holder": "hit:complex-value"},
@@ -190,6 +196,10 @@ func runLevel2ConcurrentChild(t *testing.T) {
 			if err := cachecloud.Put(level2ConcurrentBucket, key, "value-a"); err != nil {
 				t.Fatalf("holder put initial value: %v", err)
 			}
+		case "hidden-field":
+			if err := cachecloud.Put(level2ConcurrentBucket, key, integrationValue{Name: "value", Revision: 1}); err != nil {
+				t.Fatal(err)
+			}
 		case "complex-map":
 			if err := cachecloud.Put(level2ConcurrentBucket, key, newLevel2ComplexValue()); err != nil {
 				t.Fatalf("holder put initial complex value: %v", err)
@@ -229,15 +239,21 @@ func runLevel2ConcurrentChild(t *testing.T) {
 				t.Fatalf("concurrent L2 updater put different value: %v", err)
 			}
 		}
+	case "hidden-field":
+		if role == "updater" {
+			if err := cachecloud.Put(level2ConcurrentBucket, key, integrationValue{Name: "value", Revision: 2}); err != nil {
+				t.Fatal(err)
+			}
+		}
 	case "complex-map":
 		if role == "updater" {
 			if err := cachecloud.Put(level2ConcurrentBucket, key, newLevel2ComplexValue()); err != nil {
 				t.Fatalf("concurrent L2 updater put complex value: %v", err)
 			}
-			time.Sleep(300 * time.Millisecond)
-			redisKey := serviceName + ":l2:" + string(level2ConcurrentBucket) + ":" + key.RawKeyString()
+			// Remove L2 without publishing: subsequent hits must come from retained L1.
+			redisKey := serviceName + ":l2:" + string(level2ConcurrentBucket) + ":concurrent-key"
 			if err := redisstarter.RawRedisClient().Del(context.Background(), redisKey).Err(); err != nil {
-				t.Fatalf("delete complex Redis verification key: %v", err)
+				t.Fatal(err)
 			}
 		}
 	default:
@@ -270,6 +286,9 @@ func newLevel2ComplexValue() level2ComplexValue {
 
 func readLevel2ConcurrentResult(t *testing.T, scenario string, key cachecloud.CacheKey) string {
 	t.Helper()
+	if scenario == "hidden-field" {
+		return readHiddenFieldResult(t, level2ConcurrentBucket, key)
+	}
 	if scenario != "complex-map" {
 		var value string
 		err := cachecloud.Get(level2ConcurrentBucket, key, &value)

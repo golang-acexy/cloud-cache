@@ -8,28 +8,33 @@ import (
 )
 
 const (
-	BucketTypeMem     BucketType = "mem"
+	// BucketTypeMem selects process-local BigCache storage.
+	BucketTypeMem BucketType = "mem"
+	// BucketTypeDistMem selects node-local values with Redis Pub/Sub invalidation.
 	BucketTypeDistMem BucketType = "dist-mem"
-	BucketTypeRedis   BucketType = "redis"
-	BucketTypeLevel2  BucketType = "level-2"
+	// BucketTypeRedis selects shared Redis Gob storage.
+	BucketTypeRedis BucketType = "redis"
+	// BucketTypeLevel2 selects local L1 memory backed by shared Redis L2.
+	BucketTypeLevel2 BucketType = "level-2"
 )
 
-// Options 定义缓存模块的全局配置。
+// Options sets the process-wide cache namespace.
 type Options struct {
-	ServiceName string // 服务名称 可用于防止隔离不同服务使用相同redis出现的key冲突
+	// ServiceName prefixes Redis keys and topics; it is required and must not contain colon or percent characters.
+	ServiceName string
 }
 
-// BucketName 存储桶名称
+// BucketName identifies a unique bucket; Init rejects blank names and colon or percent characters.
 type BucketName caching.BucketName
 
-// BucketType 存储桶类型
+// BucketType selects a storage mode.
 type BucketType string
 
-// Loader 在缓存未命中将实际数据加载到 result。
-// 返回值 cacheable 表示是否需要将加载结果写入缓存。
+// Loader fills a caller-owned result on a miss; true permits caching and false returns the value without storage.
+// Cacheable may invoke concurrent loaders independently; CacheableSingleflight coalesces same-key misses.\n// The supplied destination and partial-result error behavior depend on the calling API.
 type Loader[T any] func(result *T) (cacheable bool, err error)
 
-// BucketConfig 定义缓存桶类型和过期时间。
+// BucketConfig holds a constructor-created mode and TTLs, validated by Init.
 type BucketConfig struct {
 	bucketName       BucketName
 	memoryExpiration time.Duration
@@ -37,13 +42,14 @@ type BucketConfig struct {
 	bucketType       BucketType
 }
 
-// CacheKey 定义支持动态参数的缓存键格式。
+// CacheKey holds a format string and does not validate arguments or uniqueness.
 type CacheKey struct {
-	// 最终key值的格式化格式 将使用 fmt.Sprintf(key.KeyFormat, keyAppend) 进行处理
+
+	// KeyFormat is used verbatim without arguments and formatted with fmt.Sprintf otherwise.
 	KeyFormat string
 }
 
-// RawKeyString 返回原始的key字符串
+// RawKeyString formats only when arguments are present; format mismatches become fmt diagnostics in the key.
 func (c CacheKey) RawKeyString(keyAppend ...any) string {
 	if len(keyAppend) > 0 {
 		return fmt.Sprintf(c.KeyFormat, keyAppend...)
@@ -51,14 +57,17 @@ func (c CacheKey) RawKeyString(keyAppend ...any) string {
 	return c.KeyFormat
 }
 
+// CacheBucket provides concurrent cache operations; callers must not concurrently mutate input data or result destinations.
+// Direct bucket access bypasses package-level nil-result validation; use compatible non-nil decoding pointers.
+// Distributed-memory and level-2 buckets reject empty resolved keys with ErrCacheKeyRequired.
 type CacheBucket interface {
-	// Get 获取指定key对应的值
-	// result 值类型指针 缓存未命中时返回标准错误 ErrCacheMiss
+
+	// Get decodes into a compatible pointer; misses return ErrCacheMiss and other errors are preserved.
 	Get(key CacheKey, result any, keyAppend ...any) error
 
-	// Put 设置key对应值
+	// Put stores Gob-compatible data; an error may follow a successful local or Redis write.
 	Put(key CacheKey, data any, keyAppend ...any) error
 
-	// Evict 清除缓存
+	// Evict deletes idempotently and, where applicable, publishes invalidation; success does not acknowledge remote application.
 	Evict(key CacheKey, keyAppend ...any) error
 }

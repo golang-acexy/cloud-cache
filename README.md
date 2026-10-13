@@ -24,12 +24,20 @@ go get github.com/golang-acexy/starter-redis
 
 ## Cache Modes
 
-| Mode | Constructor | Storage and behavior |
-| --- | --- | --- |
-| Local memory | `NewMemBucketConfig` | Process-local BigCache storage. |
-| Distributed memory | `NewDistMemBucketConfig` | Process-local memory with Redis Pub/Sub invalidation between nodes. |
-| Redis | `NewRedisBucketConfig` | Centralized Redis storage. |
-| Level 2 | `NewLevel2BucketConfig` | Local L1 memory backed by shared L2 Redis storage and cross-node L1 invalidation. |
+| Bucket type | Constructor | Storage and miss behavior | Typical use |
+| --- | --- | --- | --- |
+| `mem` (local memory) | `NewMemBucketConfig` | Process-local memory; no Redis dependency or cross-node synchronization. | Local, disposable results. |
+| `dist-mem` (distributed memory) | `NewDistMemBucketConfig` | Values stay in each node; Redis carries best-effort invalidation only. Each node loads its own misses. | Fast local reads of low-sensitivity data that can tolerate node differences. |
+| `redis` | `NewRedisBucketConfig` | Reads and writes shared Redis directly; no local copy. | Shared cached data where local-copy divergence is undesirable. |
+| `level-2` (L2) | `NewLevel2BucketConfig` | Reads local L1 first, then shared Redis L2; a Redis hit rebuilds L1. Redis also carries best-effort L1 invalidation. | Read-heavy, low-sensitivity data benefiting from local speed and shared cached results. |
+
+`Get` returns `ErrCacheMiss` when the selected storage path has no value; `Cacheable` can then invoke your Loader. Automatic Redis-to-L1 rebuilding does not publish synchronization messages.
+
+Distributed-memory and level-2 buckets favor fast local reads and low overhead. Use them for data whose correctness requirements tolerate stale reads and temporary differences between nodes, such as display information or recomputable results. Synchronization can be delayed, lost, or reordered during startup, disconnects, overload, or concurrent operations. These modes do not guarantee strong consistency, reliable event delivery, or convergence within a fixed time.
+
+Do not use their cached values as the sole authority for permission revocation, balances, inventory deductions, or other decisions requiring immediate accuracy; validate those decisions against the authoritative data source. Plain memory has no cross-node synchronization. Redis-only buckets avoid local-copy divergence but do not make cache updates transactional with the application database.
+
+Choose TTLs according to acceptable staleness and reload cost. Expiration helps recovery, but same-value renewal and stale loader writes mean that one TTL is not a guaranteed deadline for seeing the latest source data. Best-effort synchronization still aims for accuracy and stability through inexpensive validation, expiration checks, local concurrency protection, and error handling.
 
 All modes implement the same `CacheBucket` operations:
 
@@ -48,18 +56,18 @@ Initialize all cache buckets once before application code accesses the cache:
 ```go
 const (
 	UserMemoryBucket cachecloud.BucketName = "user-memory"
-	SessionBucket    cachecloud.BucketName = "session"
+	CatalogBucket    cachecloud.BucketName = "catalog"
 	ProfileBucket    cachecloud.BucketName = "profile"
-	PermissionBucket cachecloud.BucketName = "permission"
+	DisplayBucket    cachecloud.BucketName = "display"
 )
 
 err := cachecloud.Init(
 	cachecloud.Options{ServiceName: "user-service"},
 	cachecloud.NewMemBucketConfig(UserMemoryBucket, 5*time.Minute),
-	cachecloud.NewDistMemBucketConfig(SessionBucket, 10*time.Minute),
+	cachecloud.NewDistMemBucketConfig(CatalogBucket, 10*time.Minute),
 	cachecloud.NewRedisBucketConfig(ProfileBucket, time.Hour),
 	cachecloud.NewLevel2BucketConfig(
-		PermissionBucket,
+		DisplayBucket,
 		5*time.Minute,
 		24*time.Hour,
 	),
@@ -74,12 +82,12 @@ if err != nil {
 Initialization validates that:
 
 - At least one bucket is configured.
-- Every bucket has a non-empty name.
-- Expiration durations are greater than zero.
+- Every bucket has a non-empty name. Service and bucket names must not contain `:` or `%`.
+- Expiration durations are greater than zero. Memory TTLs (including distributed memory and L1) must also be at least one second for the current BigCache backend.
 - A bucket name is registered only once.
 - Every bucket uses a supported cache type.
 
-The cache runtime is process-wide and may only be initialized once. A second call to `Init` returns `ErrAlreadyInitialized`.
+The cache runtime is process-wide and may only be initialized once. A second valid call to `Init` returns `ErrAlreadyInitialized`; configuration validation runs first. Initialization does not verify Redis connectivity or wait for subscriptions. There is no public shutdown, reset, or reconfiguration API, and failed construction does not roll back all allocated resources.
 
 ## Redis Startup Order
 
@@ -103,7 +111,7 @@ if err := loader.Start(); err != nil {
 if err := cachecloud.Init(
 	cachecloud.Options{ServiceName: "user-service"},
 	cachecloud.NewLevel2BucketConfig(
-		PermissionBucket,
+		DisplayBucket,
 		5*time.Minute,
 		24*time.Hour,
 	),
@@ -133,7 +141,7 @@ var result User
 err = cachecloud.Get(ProfileBucket, userKey, &result, user.ID)
 ```
 
-The same key arguments must be supplied to `Get`, `Put`, and `Evict`.
+The same key arguments must be supplied to `Get`, `Put`, and `Evict`. Without arguments, the format is used verbatim. Formatting errors are not rejected. Initialization rejects service/bucket names containing `:` or `%` with `ErrInvalidCacheName`. Distributed-memory and level-2 operations reject empty resolved keys with `ErrCacheKeyRequired` before accessing storage or publishing. Their resolved keys may contain literal `:` and `%`.
 
 ## Common Operations
 
@@ -158,7 +166,7 @@ if err := cachecloud.Get(ProfileBucket, key, &got, want.ID); err != nil {
 }
 ```
 
-`Get` requires a non-nil result pointer. Passing a nil result returns `ErrResultRequired`.
+`Get` requires a non-nil result pointer. Package-level calls reject nil and typed-nil pointers with `ErrResultRequired`; direct bucket calls bypass this check. Other invalid destinations fail through the codec. Use a fresh, compatible result for each read; Gob decoding may retain fields in reused destinations or partially change them before an error.
 
 ### Evict
 
@@ -168,7 +176,7 @@ if err := cachecloud.Evict(ProfileBucket, key, userID); err != nil {
 }
 ```
 
-Redis deletion is idempotent: deleting a key that does not exist still succeeds unless Redis itself returns an error.
+Deletion is idempotent in all four modes: an absent entry succeeds, while storage or publication failures are still returned.
 
 ### Resolve a Bucket
 
@@ -203,13 +211,14 @@ err := cachecloud.Cacheable(
 	cachecloud.NewCacheKey("user:%d"),
 	&user,
 	func(result *User) (bool, error) {
-		rows, err := userRepository.QueryByID(userID, result)
+		loaded, err := userRepository.QueryByID(userID)
 		if err != nil {
 			return false, err
 		}
-		if rows == 0 {
+		if loaded == nil {
 			return false, ErrUserNotFound
 		}
+		*result = *loaded
 		return true, nil
 	},
 	userID,
@@ -218,6 +227,8 @@ if err != nil {
 	return err
 }
 ```
+
+This example uses the RDS Repository missing-result convention (`nil, nil`). Mongo repositories return `mongo.ErrNoDocuments`, which the loader must handle explicitly.
 
 The Loader type is:
 
@@ -233,28 +244,46 @@ Behavior:
 - A Loader error is returned unchanged and the result is not cached.
 - A nil Loader returns `ErrCacheMiss` when the cache does not contain the key.
 - A nil result pointer returns `ErrResultRequired`.
+- Cache infrastructure or decoding errors do not trigger the Loader. A cache write failure is returned even if loading already populated the result.
+- Concurrent misses are not coalesced. A Loader running during a write or eviction can later store stale data; there is no automatic source transaction or singleflight.
+
+## Coalescing Concurrent Misses
+
+Use `CacheableSingleflight` when concurrent requests for one key should share a load:
+
+```go
+var user User
+err := cachecloud.CacheableSingleflight(
+    ProfileBucket, cachecloud.NewCacheKey("user:%d"), &user,
+    func(result *User) (bool, error) {
+        loaded, err := userRepository.QueryByID(userID)
+        if err != nil {
+            return false, err
+        }
+        if loaded == nil {
+            return false, ErrUserNotFound
+        }
+        *result = *loaded
+        return true, nil
+    },
+    userID,
+)
+```
+
+This works with all four bucket types. Cache hits bypass coordination. Overlapping misses share one operation within this process, grouped by bucket, resolved key, and result type. The selected operation checks the cache again before invoking its Loader and writes at most once. The existing `Cacheable` continues to load concurrent misses independently.
+
+- Each call needs its own result pointer. The Loader receives a fresh zero value, and callers receive independent Gob-decoded snapshots, including maps and slices. A successful read replaces the destination instead of merging into its old contents.
+- Loaded results must support Gob even with `false, nil`: current waiters share that uncached result, while later misses load again. Custom codecs must decode deterministically and preserve independent ownership; this API performs additional encoding/decoding.
+- Loaders sharing a key must have equivalent behavior. Include all relevant tenant, user, and query inputs in the key. Different result types do not share flights, but they still address the same stored key and must remain storage-compatible.
+- Loader failures are shared without copying partially loaded values. Storage errors remain errors; a write error still returns the loaded result when snapshot decoding succeeds. Snapshot encoding/validation errors occur before the write. A nil Loader returns a miss without joining pending work.
+- A Loader must not recursively call this API for the same bucket, key, and type. Waiting has no cancellation or timeout. Loader panics propagate through singleflight; `runtime.Goexit` terminates participating goroutines.
+- Coordination is process-local. It does not prevent stale Loader writes after `Put`/`Evict`, provide distributed locking, or make shared Loader state safe for concurrent use across different keys.
 
 ## Distributed Memory Synchronization
 
 A distributed-memory bucket stores values only in each process's memory. Redis Pub/Sub carries invalidation events; Redis does not store the cached value.
 
-Each local entry is stored in an internal envelope containing:
-
-```text
-Gob payload + content hash + absolute expiration time
-```
-
-Gob remains the storage encoding. The content hash uses XXH3-128 over deterministic JSON when the value supports JSON encoding, which keeps logically equal maps stable across nodes even when their insertion order differs. Values that JSON cannot encode fall back to hashing the stored Gob payload.
-
-When one node creates or updates a value:
-
-1. The value is encoded once into the envelope and written to local memory.
-2. The node publishes a `put` event containing the node ID, bucket name, resolved key, content hash, and absolute expiration time.
-3. A receiving node ignores the event when it does not hold that key.
-4. A receiving node evicts its local value when the hashes differ.
-5. Equal values remain cached. If the remote expiration is more than three seconds later, the receiver silently extends its local expiration without publishing another event.
-
-This comparison prevents nodes that concurrently load the same logical value from repeatedly evicting each other. Local reads, writes, deletes, and remote synchronization for the same bucket and key are serialized through fixed synchronization shards so an expiration refresh cannot overwrite a concurrent local update.
+Remote writes do not transfer values: nodes without the key remain empty and load independently. Different hashes invalidate local values; equal hashes may extend their deadlines within the local TTL cap when the extension exceeds three seconds. Equal maps produce stable hashes regardless of insertion order. Comparison uses the Gob-decoded value and includes stored fields omitted by JSON. Use a consistent module version and type definitions across participating nodes.
 
 When one node calls `Evict`, it attempts to publish a delete event regardless of the local deletion result. Other nodes then evict the same bucket and cache key.
 
@@ -265,7 +294,7 @@ Important behavior:
 - `Cacheable` rebuilds remain node-local values; Redis transports synchronization metadata, not the cached payload.
 - Equal-value events may extend an entry only up to the receiving bucket's configured expiration limit.
 - Expiration times use Unix milliseconds and are independent of time zones, but participating hosts should keep their system clocks synchronized.
-- Redis Pub/Sub does not replay messages missed while a node is disconnected. Local expiration remains the final convergence boundary after a missed event.
+- Redis Pub/Sub does not replay messages missed while a node is disconnected. Expiration and reloading help recovery, but renewal and stale loader writes prevent a guaranteed convergence deadline.
 
 ## Level-2 Cache
 
@@ -284,7 +313,7 @@ L1 miss -> read Redis -> rebuild L1 -> return value
 Write flow:
 
 ```text
-write Redis -> write local L1 -> publish stored-byte hash
+write Redis -> write local L1 -> publish invalidation metadata
 ```
 
 Other nodes keep their L1 value when the hash is unchanged. A different hash evicts their L1 value, so the next read rebuilds it from Redis.
@@ -296,6 +325,16 @@ delete Redis -> delete local L1 -> publish delete event
 ```
 
 Errors from these operations are combined where appropriate so a local failure does not prevent cross-node invalidation from being attempted.
+
+## Stored Values and Equality
+
+All buckets require Gob-compatible values and matching read types. Keep inputs unchanged during writes. Interface fields may require `gob.Register` for their concrete types; custom Gob codecs must round-trip into a fresh value and should decode deterministically without external side effects.
+
+Distributed-memory and L2 compare decoded values using a stable digest. Supported values include scalars, exported-field structs, nested maps, slices, arrays, pointers, `time.Time`, `time.Duration`, `decimal.Decimal`, `big.Int`, `big.Rat`, `big.Float`, `json.Number`, `net.IP`, `netip.Addr`, UUIDs, and SQL nullable values, provided they also support Gob storage. Map order and pointer addresses do not affect equality; sequence order and stored field changes do.
+
+Equality follows normalized value semantics: times compare by instant, decimals by numeric value, floating signed zeros compare equal, and NaN representations are normalized. Gob itself may discard distinctions such as nil versus empty slices. Same-digest notifications retain the existing local representation; store representation-sensitive information, such as a time-zone name or decimal scale, in explicit fields if it must trigger invalidation. `json.RawMessage` remains raw bytes, not normalized JSON.
+
+Gob-compatible values outside the digest's supported types or traversal limits fall back to a Gob-byte digest. They remain storable but may cause extra invalidations, including maps with pointer keys or custom types containing private fields. Gob encoding or round-trip decoding failures abort distributed-memory/L2 writes before storage. Digests are change-detection aids, not security checks or proofs of equality.
 
 ## Common Errors
 
@@ -321,6 +360,8 @@ if errors.Is(err, cachecloud.ErrCacheMiss) {
 | `ErrNotInitialized` | A cache operation was used before `Init`. |
 | `ErrResultRequired` | A nil result pointer was passed to `Get` or `Cacheable`. |
 | `ErrInvalidSyncEvent` | A distributed invalidation message is malformed. |
+| `ErrInvalidCacheName` | A service or bucket name contains `:` or `%`. |
+| `ErrCacheKeyRequired` | A distributed-memory or level-2 operation resolved an empty key. |
 
 ## Design Notes
 
@@ -330,5 +371,18 @@ if errors.Is(err, cachecloud.ErrCacheMiss) {
 - Bucket implementations are created eagerly during initialization, so runtime reads do not mutate routing maps.
 - Duplicate bucket names are rejected instead of being resolved through an implicit priority order.
 - Distributed synchronization uses structured JSON events and exact node ID comparison.
-- Synchronization hashes are calculated from bytes read back from the actual memory cache, not from the value before storage.
+- Distributed-memory and L2 writes compute a stable digest from the Gob-decoded value before storage; expiration is excluded. Reads and automatic L1 rebuilding reuse the stored digest.
 - Cache values use the Gob codecs provided by the underlying toolkit and Redis starter implementations.
+
+## Expiration and Failure Boundaries
+
+- Plain memory uses BigCache cleanup (currently a five-second cleanup interval) and does not check TTL on each read. Expired values can remain readable until cleanup; do not use this mode as a strict validity deadline. Distributed memory and level-2 entries add millisecond logical deadline checks.
+- Reads do not renew TTL. Tiny positive L2 Redis TTLs can round to an immediately expired logical deadline; memory TTLs below one second are rejected by the backend. L1 is capped by the L2 envelope deadline, but configuration does not require its TTL to be shorter.
+- Pub/Sub publication success does not acknowledge remote processing. Startup, disconnects, overload, and event reordering can cause stale reads; synchronization is not strong consistency.
+- Level-2 Put can update Redis before L1 or publication fails. A failed L1 write triggers best-effort local eviction before publication; cleanup errors are also returned. Evict attempts all three steps and joins errors; a failed Redis deletion can let old L2 data repopulate L1. Errors do not imply unchanged state.
+- Level-2 refill rechecks expiration before filling L1 and after exhausting three interference retries. An expired snapshot returns `ErrCacheMiss`; a still-valid snapshot may be returned without filling L1. This does not guarantee the latest value. Source Loader execution is outside this protection.
+- Redis operations and subscriptions do not inherit request cancellation through this API. Finish application work before shutting down starter-redis; cache-owned subscription retries have no public cancellation handle.
+
+## Testing
+
+Run `go test -race ./cachecloud` for package tests and `go test -race ./test -run '^TestMemoryCacheAndCacheable$'` for the public memory flow. With a configured test Redis cluster, run `go test -race -count=1 -timeout=240s ./...` for all four modes, expiration, concurrent access, and cross-process invalidation. `TestAllCacheModes` also verifies that rebuilding L1 from Redis does not publish an event. Redis tests use external infrastructure and some launch multiple processes.
