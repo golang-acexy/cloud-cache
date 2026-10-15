@@ -38,16 +38,23 @@ type redisCacheBucket struct {
 
 // Get reads and decodes this bucket; backend failures are distinct from ErrCacheMiss.
 func (m *redisCacheBucket) Get(key CacheKey, result any, keyArgs ...any) error {
-	err := redisstarter.StringCmd().GetAnyWithGob(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expiration), result, keyArgs...)
+	payload, err := redisstarter.StringCmd().GetBytes(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expiration), keyArgs...)
 	if errors.Is(err, redis.Nil) {
 		return ErrCacheMiss
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return decodeCacheValue(payload, result)
 }
 
 // Put encodes and stores a value using the bucket expiration.
 func (m *redisCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
-	return redisstarter.StringCmd().SetAnyWithGob(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expiration), data, keyArgs...)
+	payload, err := encodeCacheValue(data)
+	if err != nil {
+		return err
+	}
+	return redisstarter.StringCmd().SetBytes(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expiration), payload, keyArgs...)
 }
 
 // Evict removes an entry; an absent entry succeeds.

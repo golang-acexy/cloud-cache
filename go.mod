@@ -3,7 +3,7 @@ module github.com/golang-acexy/cloud-cache
 go 1.26.7
 
 require (
-	github.com/acexy/golang-toolkit v1.26.2
+	github.com/acexy/golang-toolkit v1.26.3
 	github.com/allegro/bigcache/v3 v3.2.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/golang-acexy/starter-parent v1.26.2
