@@ -44,16 +44,23 @@ type memoryCacheBucket struct {
 
 // Get reads and decodes this bucket; backend failures are distinct from ErrCacheMiss.
 func (m *memoryCacheBucket) Get(key CacheKey, result any, keyArgs ...any) error {
-	err := m.manager.Get(m.bucketName, caching.NewCacheKey(key.KeyFormat), result, keyArgs...)
+	payload, err := m.manager.GetBytes(m.bucketName, caching.NewCacheKey(key.KeyFormat), keyArgs...)
 	if errors.Is(err, toolkitError.ErrCacheMiss) {
 		return ErrCacheMiss
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return decodeCacheValue(payload, result)
 }
 
 // Put encodes and stores a value using the bucket expiration.
 func (m *memoryCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
-	return m.manager.Put(m.bucketName, caching.NewCacheKey(key.KeyFormat), data, keyArgs...)
+	payload, err := encodeCacheValue(data)
+	if err != nil {
+		return err
+	}
+	return m.manager.PutBytes(m.bucketName, caching.NewCacheKey(key.KeyFormat), payload, keyArgs...)
 }
 
 // Evict removes an entry; an absent entry succeeds.

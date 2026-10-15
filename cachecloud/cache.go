@@ -1,8 +1,6 @@
 package cachecloud
 
 import (
-	"bytes"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"reflect"
@@ -70,6 +68,7 @@ func GetBucketByType(bucketName BucketName, bucketType BucketType) CacheBucket {
 }
 
 // Get decodes a cached value into a caller-owned compatible pointer.
+// A cached nil clears the destination to its zero value and returns success.
 // Nil and typed-nil pointers return ErrResultRequired; other destination errors come from the codec.
 // Misses return ErrCacheMiss; decoding errors may leave partial results.
 func Get(bucketName BucketName, cacheKey CacheKey, result any, keyAppend ...any) error {
@@ -84,6 +83,7 @@ func Get(bucketName BucketName, cacheKey CacheKey, result any, keyAppend ...any)
 }
 
 // Put encodes and stores a value using the bucket TTL.
+// Nil interfaces, nil pointers through pointer/interface chains, and nil maps/slices cache an empty result.
 // Distributed writes may store the value before returning a publication or L1 error; no rollback is provided.
 func Put(bucketName BucketName, cacheKey CacheKey, data any, keyAppend ...any) error {
 	bucket, err := resolveBucket(bucketName)
@@ -105,6 +105,7 @@ func Evict(bucketName BucketName, cacheKey CacheKey, keyAppend ...any) error {
 
 // Cacheable loads only after ErrCacheMiss; hits and infrastructure/codec errors do not invoke the loader.
 // A nil loader preserves the miss. A false result skips storage; loader errors are returned unchanged.
+// A true result caches nil as a hit, preventing subsequent loads until expiration or eviction.
 // A cache write error is returned even after the loader filled result successfully.
 // Concurrent misses are not coalesced; an in-flight loader can overwrite a newer write or repopulate an evicted key.
 func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, loader Loader[T], keyAppend ...any) error {
@@ -129,7 +130,7 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, loade
 // CacheableSingleflight coalesces overlapping misses in this process by bucket, resolved key, and T.
 // Hits bypass coordination; the leader rechecks storage before calling one loader with a fresh zero value.
 // Loaders for the same key must be equivalent and must not recursively request the same flight.
-// Results must support Gob even when the loader skips storage; each caller receives an independent decoded value.
+// Results must be nil or support Gob even when the loader skips storage; each caller receives an independent decoded value.
 // Loader and storage errors are shared; a write error still returns the loaded value when decoding succeeds.
 // Loader failures do not copy partial values. Panics propagate to participants; Goexit terminates participants.
 // A nil loader preserves a miss without joining a flight. Callers must use independent result pointers.
@@ -167,25 +168,25 @@ func CacheableSingleflight[T any](bucketName BucketName, cacheKey CacheKey, resu
 		if readErr != nil {
 			return nil, readErr
 		}
-		var payload bytes.Buffer
-		if err := gob.NewEncoder(&payload).Encode(&value); err != nil {
+		payload, err := encodeCacheValue(&value)
+		if err != nil {
 			return nil, err
 		}
 		// Validate the shared snapshot before any write, including custom codec failures.
 		var decoded T
-		if err := gob.NewDecoder(bytes.NewReader(payload.Bytes())).Decode(&decoded); err != nil {
+		if err := decodeCacheValue(payload, &decoded); err != nil {
 			return nil, err
 		}
 		var writeErr error
 		if cacheable {
 			writeErr = bucket.Put(key, &value)
 		}
-		return payload.Bytes(), writeErr
+		return payload, writeErr
 	})
-	payload, _ := shared.([]byte)
-	if payload != nil {
+	payload, hasPayload := shared.([]byte)
+	if hasPayload {
 		var value T
-		if err := gob.NewDecoder(bytes.NewReader(payload)).Decode(&value); err != nil {
+		if err := decodeCacheValue(payload, &value); err != nil {
 			return errors.Join(flightErr, err)
 		}
 		*result = value

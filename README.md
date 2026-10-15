@@ -168,6 +168,12 @@ if err := cachecloud.Get(ProfileBucket, key, &got, want.ID); err != nil {
 
 `Get` requires a non-nil result pointer. Package-level calls reject nil and typed-nil pointers with `ErrResultRequired`; direct bucket calls bypass this check. Other invalid destinations fail through the codec. Use a fresh, compatible result for each read; Gob decoding may retain fields in reused destinations or partially change them before an error.
 
+All storage modes support cached nil results. Nil interfaces, nil pointers (including pointer/interface chains), and nil maps/slices use an empty payload. A hit on this payload clears the destination to its zero value and returns nil; it is distinct from `ErrCacheMiss`. Non-nil empty strings, zero scalars, and empty collections still use Gob. Redis storage uses `GetBytes`/`SetBytes`, and local storage uses the toolkit's byte APIs; this module owns value encoding. Distributed modes retain their envelope, TTL, and invalidation metadata for nil values.
+
+For a nullable object, use `var user *User` and pass `&user` to `Get` or `Cacheable`. A Loader returning `true, nil` with `*result == nil` caches the missing result; `false, nil` still skips storage. `CacheableSingleflight` also supports nil results, including uncached results shared with current waiters. Nil result destinations themselves remain invalid.
+
+Non-nil Gob payloads remain compatible with existing entries. Older module versions cannot decode the new empty payload representation; upgrade all participating readers before writing nil results.
+
 ### Evict
 
 ```go
@@ -273,7 +279,7 @@ err := cachecloud.CacheableSingleflight(
 This works with all four bucket types. Cache hits bypass coordination. Overlapping misses share one operation within this process, grouped by bucket, resolved key, and result type. The selected operation checks the cache again before invoking its Loader and writes at most once. The existing `Cacheable` continues to load concurrent misses independently.
 
 - Each call needs its own result pointer. The Loader receives a fresh zero value, and callers receive independent Gob-decoded snapshots, including maps and slices. A successful read replaces the destination instead of merging into its old contents.
-- Loaded results must support Gob even with `false, nil`: current waiters share that uncached result, while later misses load again. Custom codecs must decode deterministically and preserve independent ownership; this API performs additional encoding/decoding.
+- Loaded results must be nil or support Gob even with `false, nil`: current waiters share that uncached result, while later misses load again. Custom codecs must decode deterministically and preserve independent ownership; this API performs additional encoding/decoding.
 - Loaders sharing a key must have equivalent behavior. Include all relevant tenant, user, and query inputs in the key. Different result types do not share flights, but they still address the same stored key and must remain storage-compatible.
 - Loader failures are shared without copying partially loaded values. Storage errors remain errors; a write error still returns the loaded result when snapshot decoding succeeds. Snapshot encoding/validation errors occur before the write. A nil Loader returns a miss without joining pending work.
 - A Loader must not recursively call this API for the same bucket, key, and type. Waiting has no cancellation or timeout. Loader panics propagate through singleflight; `runtime.Goexit` terminates participating goroutines.
@@ -328,7 +334,7 @@ Errors from these operations are combined where appropriate so a local failure d
 
 ## Stored Values and Equality
 
-All buckets require Gob-compatible values and matching read types. Keep inputs unchanged during writes. Interface fields may require `gob.Register` for their concrete types; custom Gob codecs must round-trip into a fresh value and should decode deterministically without external side effects.
+All buckets accept nil results or Gob-compatible values with matching read types. Keep inputs unchanged during writes. Interface fields may require `gob.Register` for their concrete types; custom Gob codecs must round-trip into a fresh value and should decode deterministically without external side effects.
 
 Distributed-memory and L2 compare decoded values using a stable digest. Supported values include scalars, exported-field structs, nested maps, slices, arrays, pointers, `time.Time`, `time.Duration`, `decimal.Decimal`, `big.Int`, `big.Rat`, `big.Float`, `json.Number`, `net.IP`, `netip.Addr`, UUIDs, and SQL nullable values, provided they also support Gob storage. Map order and pointer addresses do not affect equality; sequence order and stored field changes do.
 

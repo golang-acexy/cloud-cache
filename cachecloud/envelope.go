@@ -1,9 +1,7 @@
 package cachecloud
 
 import (
-	"bytes"
 	"encoding/binary"
-	"encoding/gob"
 	"encoding/hex"
 	"reflect"
 	"time"
@@ -14,25 +12,30 @@ import (
 
 const cacheExpirationTolerance = 3 * time.Second
 
-// cacheValueEnvelope stores Gob payload bytes with their hash and a millisecond deadline.
+// cacheValueEnvelope stores Gob payload bytes or an empty nil payload with a hash and millisecond deadline.
 type cacheValueEnvelope struct {
-	// Payload contains the Gob-encoded cache value.
+	// Payload contains the Gob-encoded cache value; an empty payload represents nil.
 	Payload []byte
-	// ValueHash identifies the decoded value, with a tagged payload fallback.
+	// ValueHash identifies the decoded value, with a tagged payload fallback and a reserved nil marker.
 	ValueHash string
 	// ExpireAt is the logical expiration timestamp in Unix milliseconds.
 	ExpireAt int64
 }
 
 func newCacheValueEnvelope(data any, expiration time.Duration) (cacheValueEnvelope, error) {
-	var payload bytes.Buffer
-	if err := gob.NewEncoder(&payload).Encode(data); err != nil {
+	dataBytes, err := encodeCacheValue(data)
+	if err != nil {
 		return cacheValueEnvelope{}, err
 	}
-	dataBytes := payload.Bytes()
+	if len(dataBytes) == 0 {
+		return cacheValueEnvelope{
+			ValueHash: "nil",
+			ExpireAt:  time.Now().Add(expiration).UnixMilli(),
+		}, nil
+	}
 	// Hash the stored representation: Gob may discard or transform input fields.
 	decoded := reflect.New(reflect.TypeOf(data))
-	if err := gob.NewDecoder(bytes.NewReader(dataBytes)).Decode(decoded.Interface()); err != nil {
+	if err := decodeCacheValue(dataBytes, decoded.Interface()); err != nil {
 		return cacheValueEnvelope{}, err
 	}
 	valueHash, err := stablehash.Sum(decoded.Elem().Interface())
@@ -58,7 +61,7 @@ func xxh3Hex(data []byte) string {
 }
 
 func (e cacheValueEnvelope) decode(result any) error {
-	return gob.NewDecoder(bytes.NewReader(e.Payload)).Decode(result)
+	return decodeCacheValue(e.Payload, result)
 }
 
 func (e cacheValueEnvelope) expired(now time.Time) bool {

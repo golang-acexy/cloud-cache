@@ -62,10 +62,11 @@ func (c CacheKey) RawKeyString(keyAppend ...any) string {
 // Distributed-memory and level-2 buckets reject empty resolved keys with ErrCacheKeyRequired.
 type CacheBucket interface {
 
-	// Get decodes into a compatible pointer; misses return ErrCacheMiss and other errors are preserved.
+	// Get decodes into a compatible pointer; a cached nil clears the destination and succeeds.
+	// Misses return ErrCacheMiss and other errors are preserved.
 	Get(key CacheKey, result any, keyAppend ...any) error
 
-	// Put stores Gob-compatible data; an error may follow a successful local or Redis write.
+	// Put stores nil or Gob-compatible data; an error may follow a successful local or Redis write.
 	Put(key CacheKey, data any, keyAppend ...any) error
 
 	// Evict deletes idempotently and, where applicable, publishes invalidation; success does not acknowledge remote application.
