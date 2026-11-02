@@ -3,6 +3,8 @@ package cachecloud
 import "errors"
 
 var (
+	// ErrInvalidBigCacheConfig indicates invalid custom BigCache settings rejected before bucket construction.
+	ErrInvalidBigCacheConfig = errors.New("invalid BigCache configuration")
 	// ErrInvalidCacheName indicates a service or bucket name containing ':' or '%'.
 	ErrInvalidCacheName = errors.New("cache service and bucket names must not contain ':' or '%'")
 	// ErrCacheKeyRequired indicates an empty resolved key in a synchronized bucket.

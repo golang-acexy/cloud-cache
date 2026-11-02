@@ -42,7 +42,7 @@ func newLevel2CacheManager(serviceName string, configs []BucketConfig) (*level2C
 	syncTopic := serviceName + ":" + level2SyncTopicName
 	redisKeyPrefix := serviceName + ":l2:"
 	for _, config := range configs {
-		bucket, err := caching.NewSimpleBigCache(config.memoryExpiration)
+		bucket, err := newMemoryBucket(config)
 		if err != nil {
 			return nil, err
 		}
@@ -147,10 +147,21 @@ func (m *level2CacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
 	if err != nil {
 		return err
 	}
+	return m.putEnvelope(rawKey, redisEnvelope)
+}
+
+func (m *level2CacheBucket) putSnapshot(key CacheKey, payload []byte, decoded any) error {
+	if key.KeyFormat == "" {
+		return ErrCacheKeyRequired
+	}
+	return m.putEnvelope(key.KeyFormat, cacheEnvelopeFromSnapshot(payload, decoded, m.redisExpiration))
+}
+
+func (m *level2CacheBucket) putEnvelope(rawKey string, redisEnvelope cacheValueEnvelope) error {
 	shard := m.owner.syncShard(cacheSyncLockKey(m.bucketName, rawKey))
 	shard.Lock()
 	shard.generation++
-	if err = m.redisBucket.Put(NewCacheKey(rawKey), redisEnvelope); err != nil {
+	if err := m.redisBucket.Put(NewCacheKey(rawKey), redisEnvelope); err != nil {
 		shard.Unlock()
 		return err
 	}

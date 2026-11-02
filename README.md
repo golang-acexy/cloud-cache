@@ -83,11 +83,33 @@ Initialization validates that:
 
 - At least one bucket is configured.
 - Every bucket has a non-empty name. Service and bucket names must not contain `:` or `%`.
-- Expiration durations are greater than zero. Memory TTLs (including distributed memory and L1) must also be at least one second for the current BigCache backend.
+- Expiration durations are greater than zero. Memory TTLs (including distributed memory and L1) must also be at least one second when BigCache periodic cleanup is enabled.
 - A bucket name is registered only once.
 - Every bucket uses a supported cache type.
 
 The cache runtime is process-wide and may only be initialized once. A second valid call to `Init` returns `ErrAlreadyInitialized`; configuration validation runs first. Initialization does not verify Redis connectivity or wait for subscriptions. There is no public shutdown, reset, or reconfiguration API, and failed construction does not roll back all allocated resources.
+
+### Optional BigCache Settings
+
+`NewMemBucketConfig`, `NewDistMemBucketConfig`, and `NewLevel2BucketConfig` accept an optional `bigcache.Config` from `github.com/allegro/bigcache/v3`. Existing calls without it retain toolkit defaults. Only the first supplied config is used; additional configs are ignored.
+
+```go
+settings := bigcache.DefaultConfig(time.Minute)
+settings.Shards = 64
+settings.MaxEntriesInWindow = 10_000
+settings.MaxEntrySize = 1024
+settings.HardMaxCacheSize = 64
+
+bucket := cachecloud.NewLevel2BucketConfig(
+    "users", time.Minute, 10*time.Minute, settings,
+)
+```
+
+Settings apply per bucket, and only to L1 for level-2 buckets. The constructor shallow-copies the config. The bucket's memory TTL overrides `LifeWindow`; Redis TTL is unchanged. Other zero values are preserved, so `CleanWindow=0` disables periodic cleanup. BigCache expiration has one-second resolution; plain memory reads do not enforce an exact TTL deadline. Toolkit supplies its own `Logger`.
+
+`Init` rejects invalid custom shard counts, negative size settings, and subsecond memory TTLs with positive `CleanWindow`, using `ErrInvalidBigCacheConfig` before allocating buckets. Config values are not merged with defaults: start from `bigcache.DefaultConfig` when customizing individual fields.
+
+`MaxEntriesInWindow` and `MaxEntrySize` size initial allocations; they are not entry-count or value-size limits. `HardMaxCacheSize` limits the byte queues in MB, not total process memory, and may evict entries before TTL. Custom hashers and callback closures remain shared: keep them concurrency-safe, and do not reenter the bucket from callbacks. Removal callbacks receive stored bytes, including the envelope in distributed-memory and level-2 buckets.
 
 ## Redis Startup Order
 
@@ -279,7 +301,7 @@ err := cachecloud.CacheableSingleflight(
 This works with all four bucket types. Cache hits bypass coordination. Overlapping misses share one operation within this process, grouped by bucket, resolved key, and result type. The selected operation checks the cache again before invoking its Loader and writes at most once. The existing `Cacheable` continues to load concurrent misses independently.
 
 - Each call needs its own result pointer. The Loader receives a fresh zero value, and callers receive independent Gob-decoded snapshots, including maps and slices. A successful read replaces the destination instead of merging into its old contents.
-- Loaded results must be nil or support Gob even with `false, nil`: current waiters share that uncached result, while later misses load again. Custom codecs must decode deterministically and preserve independent ownership; this API performs additional encoding/decoding.
+- Loaded results must be nil or support Gob even with `false, nil`: current waiters share that uncached result, while later misses load again. Built-in buckets reuse the validated original snapshot when storing it. Custom codecs must be deterministic, preserve independent ownership, and not depend on encoding/decoding invocation counts.
 - Loaders sharing a key must have equivalent behavior. Include all relevant tenant, user, and query inputs in the key. Different result types do not share flights, but they still address the same stored key and must remain storage-compatible.
 - Loader failures are shared without copying partially loaded values. Storage errors remain errors; a write error still returns the loaded result when snapshot decoding succeeds. Snapshot encoding/validation errors occur before the write. A nil Loader returns a miss without joining pending work.
 - A Loader must not recursively call this API for the same bucket, key, and type. Waiting has no cancellation or timeout. Loader panics propagate through singleflight; `runtime.Goexit` terminates participating goroutines.

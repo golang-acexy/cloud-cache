@@ -31,7 +31,7 @@ func newDistMemCacheManager(serviceName string, configs []BucketConfig) (*distMe
 	buckets := make(map[BucketName]*distMemCacheBucket, len(configs))
 	syncTopic := serviceName + ":" + distMemSyncTopicName
 	for _, config := range configs {
-		bucket, err := caching.NewSimpleBigCache(config.memoryExpiration)
+		bucket, err := newMemoryBucket(config)
 		if err != nil {
 			return nil, err
 		}
@@ -128,10 +128,21 @@ func (m *distMemCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
 	if err != nil {
 		return err
 	}
+	return m.putEnvelope(rawKey, envelope)
+}
+
+func (m *distMemCacheBucket) putSnapshot(key CacheKey, payload []byte, decoded any) error {
+	if key.KeyFormat == "" {
+		return ErrCacheKeyRequired
+	}
+	return m.putEnvelope(key.KeyFormat, cacheEnvelopeFromSnapshot(payload, decoded, m.expiration))
+}
+
+func (m *distMemCacheBucket) putEnvelope(rawKey string, envelope cacheValueEnvelope) error {
 	cacheKey := caching.NewCacheKey(rawKey)
 	lock := m.owner.syncLock(cacheSyncLockKey(m.bucketName, rawKey))
 	lock.Lock()
-	if err = m.manager.Put(m.managerBucketName, cacheKey, envelope); err != nil {
+	if err := m.manager.Put(m.managerBucketName, cacheKey, envelope); err != nil {
 		lock.Unlock()
 		return err
 	}

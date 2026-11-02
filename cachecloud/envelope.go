@@ -28,17 +28,22 @@ func newCacheValueEnvelope(data any, expiration time.Duration) (cacheValueEnvelo
 		return cacheValueEnvelope{}, err
 	}
 	if len(dataBytes) == 0 {
-		return cacheValueEnvelope{
-			ValueHash: "nil",
-			ExpireAt:  time.Now().Add(expiration).UnixMilli(),
-		}, nil
+		return cacheEnvelopeFromSnapshot(dataBytes, nil, expiration), nil
 	}
 	// Hash the stored representation: Gob may discard or transform input fields.
 	decoded := reflect.New(reflect.TypeOf(data))
 	if err := decodeCacheValue(dataBytes, decoded.Interface()); err != nil {
 		return cacheValueEnvelope{}, err
 	}
-	valueHash, err := stablehash.Sum(decoded.Elem().Interface())
+	return cacheEnvelopeFromSnapshot(dataBytes, decoded.Elem().Interface(), expiration), nil
+}
+
+// cacheEnvelopeFromSnapshot hashes the validated decoded value while retaining its original bytes.
+func cacheEnvelopeFromSnapshot(dataBytes []byte, decoded any, expiration time.Duration) cacheValueEnvelope {
+	if len(dataBytes) == 0 {
+		return cacheValueEnvelope{ValueHash: "nil", ExpireAt: time.Now().Add(expiration).UnixMilli()}
+	}
+	valueHash, err := stablehash.Sum(decoded)
 	if err != nil {
 		// Preserve Gob-compatible values outside the canonicalizer's type or resource limits.
 		valueHash = "gob:" + xxh3Hex(dataBytes)
@@ -49,7 +54,7 @@ func newCacheValueEnvelope(data any, expiration time.Duration) (cacheValueEnvelo
 		Payload:   dataBytes,
 		ValueHash: valueHash,
 		ExpireAt:  time.Now().Add(expiration).UnixMilli(),
-	}, nil
+	}
 }
 
 func xxh3Hex(data []byte) string {

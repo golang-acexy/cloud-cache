@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/acexy/golang-toolkit/caching"
+	"github.com/allegro/bigcache/v3"
 )
 
 const (
@@ -40,6 +41,7 @@ type BucketConfig struct {
 	memoryExpiration time.Duration
 	redisExpiration  time.Duration
 	bucketType       BucketType
+	bigCacheConfig   *bigcache.Config
 }
 
 // CacheKey holds a format string and does not validate arguments or uniqueness.

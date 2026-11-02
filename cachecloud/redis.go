@@ -57,6 +57,10 @@ func (m *redisCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
 	return redisstarter.StringCmd().SetBytes(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expiration), payload, keyArgs...)
 }
 
+func (m *redisCacheBucket) putSnapshot(key CacheKey, payload []byte, _ any) error {
+	return redisstarter.StringCmd().SetBytes(redisstarter.NewRedisKey(m.keyPrefix+key.KeyFormat, m.expiration), payload)
+}
+
 // Evict removes an entry; an absent entry succeeds.
 func (m *redisCacheBucket) Evict(key CacheKey, keyArgs ...any) error {
 	client := redisstarter.RawRedisClient()

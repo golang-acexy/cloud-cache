@@ -19,7 +19,7 @@ func newMemoryCacheManager(configs []BucketConfig) (*memoryCacheManager, error) 
 	manager := caching.NewCacheManager()
 	buckets := make(map[BucketName]*memoryCacheBucket, len(configs))
 	for _, config := range configs {
-		bucket, err := caching.NewSimpleBigCache(config.memoryExpiration)
+		bucket, err := newMemoryBucket(config)
 		if err != nil {
 			return nil, err
 		}
@@ -61,6 +61,10 @@ func (m *memoryCacheBucket) Put(key CacheKey, data any, keyArgs ...any) error {
 		return err
 	}
 	return m.manager.PutBytes(m.bucketName, caching.NewCacheKey(key.KeyFormat), payload, keyArgs...)
+}
+
+func (m *memoryCacheBucket) putSnapshot(key CacheKey, payload []byte, _ any) error {
+	return m.manager.PutBytes(m.bucketName, caching.NewCacheKey(key.KeyFormat), payload)
 }
 
 // Evict removes an entry; an absent entry succeeds.
