@@ -45,3 +45,9 @@ func decodeCacheValue(payload []byte, result any) error {
 	value.Elem().SetZero()
 	return nil
 }
+
+// cacheSnapshotWriter stores an immutable, already validated snapshot without re-encoding its value.
+// decoded is used only for synchronized value hashing; implementations must not mutate either input.
+type cacheSnapshotWriter interface {
+	putSnapshot(key CacheKey, payload []byte, decoded any) error
+}

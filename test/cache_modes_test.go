@@ -60,6 +60,7 @@ func TestAllCacheModes(t *testing.T) {
 		t.Run(string(bucket), func(t *testing.T) {
 			verifyIntegratedValueTypes(t, bucket)
 			verifySingleflightMode(t, bucket)
+			verifySingleflightSnapshot(t, bucket)
 			key := cachecloud.NewCacheKey("item:%s")
 			want := integrationValue{"original", 1, map[string]int{"a": 1, "b": 2}}
 			if err := cachecloud.Put(bucket, key, &want, "literal:%s"); err != nil {

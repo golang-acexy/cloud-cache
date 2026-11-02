@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/allegro/bigcache/v3"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -15,20 +16,28 @@ import (
 var cacheFlightGroups sync.Map // map[reflect.Type]*singleflight.Group
 
 // NewMemBucketConfig configures process-local storage; Init requires a positive duration. Expiration follows BigCache cleanup, not a strict read deadline.
-func NewMemBucketConfig(name BucketName, expiration time.Duration) BucketConfig {
+// The first optional config is shallow-copied; later configs are ignored. Without one, toolkit defaults apply.
+// The bucket memory TTL overrides LifeWindow, and toolkit logging overrides Logger.
+// Custom hashers and callbacks remain shared and must be concurrency-safe; callbacks must not reenter the bucket.
+func NewMemBucketConfig(name BucketName, expiration time.Duration, configs ...bigcache.Config) BucketConfig {
 	return BucketConfig{
 		bucketName:       name,
 		memoryExpiration: expiration,
 		bucketType:       BucketTypeMem,
+		bigCacheConfig:   copyBigCacheConfig(configs),
 	}
 }
 
 // NewDistMemBucketConfig configures local values with asynchronous Redis invalidation; Init requires a positive duration.
-func NewDistMemBucketConfig(name BucketName, expiration time.Duration) BucketConfig {
+// The first optional config is shallow-copied; later configs are ignored. Without one, toolkit defaults apply.
+// The bucket memory TTL overrides LifeWindow, and toolkit logging overrides Logger.
+// Custom hashers and callbacks remain shared and must be concurrency-safe; callbacks must not reenter the bucket.
+func NewDistMemBucketConfig(name BucketName, expiration time.Duration, configs ...bigcache.Config) BucketConfig {
 	return BucketConfig{
 		bucketName:       name,
 		memoryExpiration: expiration,
 		bucketType:       BucketTypeDistMem,
+		bigCacheConfig:   copyBigCacheConfig(configs),
 	}
 }
 
@@ -43,12 +52,16 @@ func NewRedisBucketConfig(name BucketName, expiration time.Duration) BucketConfi
 
 // NewLevel2BucketConfig configures L1 memory and shared Redis L2; both durations must be positive.
 // L1 entries are capped by the L2 envelope deadline; durations need not be ordered.
-func NewLevel2BucketConfig(name BucketName, memoryExpiration, redisExpiration time.Duration) BucketConfig {
+// The first optional config is shallow-copied; later configs are ignored. Without one, toolkit defaults apply.
+// The bucket memory TTL overrides LifeWindow, and toolkit logging overrides Logger.
+// Custom hashers and callbacks remain shared and must be concurrency-safe; callbacks must not reenter the bucket.
+func NewLevel2BucketConfig(name BucketName, memoryExpiration, redisExpiration time.Duration, configs ...bigcache.Config) BucketConfig {
 	return BucketConfig{
 		bucketName:       name,
 		memoryExpiration: memoryExpiration,
 		redisExpiration:  redisExpiration,
 		bucketType:       BucketTypeLevel2,
+		bigCacheConfig:   copyBigCacheConfig(configs),
 	}
 }
 
@@ -131,6 +144,7 @@ func Cacheable[T any](bucketName BucketName, cacheKey CacheKey, result *T, loade
 // Hits bypass coordination; the leader rechecks storage before calling one loader with a fresh zero value.
 // Loaders for the same key must be equivalent and must not recursively request the same flight.
 // Results must be nil or support Gob even when the loader skips storage; each caller receives an independent decoded value.
+// Built-in buckets store the validated snapshot directly; custom codecs must not depend on invocation counts.
 // Loader and storage errors are shared; a write error still returns the loaded value when decoding succeeds.
 // Loader failures do not copy partial values. Panics propagate to participants; Goexit terminates participants.
 // A nil loader preserves a miss without joining a flight. Callers must use independent result pointers.
@@ -179,7 +193,11 @@ func CacheableSingleflight[T any](bucketName BucketName, cacheKey CacheKey, resu
 		}
 		var writeErr error
 		if cacheable {
-			writeErr = bucket.Put(key, &value)
+			if writer, ok := bucket.(cacheSnapshotWriter); ok {
+				writeErr = writer.putSnapshot(key, payload, &decoded)
+			} else {
+				writeErr = bucket.Put(key, &value)
+			}
 		}
 		return payload, writeErr
 	})

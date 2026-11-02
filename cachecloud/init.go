@@ -22,6 +22,7 @@ var runtimeState struct {
 
 // Init validates configuration and publishes one process-wide runtime after constructing all buckets.
 // Service and bucket names containing colon or percent characters return ErrInvalidCacheName.
+// Invalid custom BigCache settings return ErrInvalidBigCacheConfig before any bucket is allocated.
 // A subsequent valid call returns ErrAlreadyInitialized; invalid configuration is checked first.
 // Start Redis first for Redis-backed modes; success does not verify Redis health or subscription readiness.
 // There is no public shutdown, reset, or reconfiguration API; failed construction does not clean up all allocated resources.
@@ -105,6 +106,9 @@ func validateConfig(options Options, bucketConfigs []BucketConfig) error {
 			}
 		default:
 			return fmt.Errorf("%w: %s", ErrUnsupportedBucketType, config.bucketType)
+		}
+		if err := validateBigCacheConfig(config); err != nil {
+			return fmt.Errorf("%w: %s", err, config.bucketName)
 		}
 	}
 	return nil
